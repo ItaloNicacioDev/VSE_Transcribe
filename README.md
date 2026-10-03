@@ -1,113 +1,301 @@
+# VSE_Transcribe
+
+### AI transcription and subtitle generation for Blender's Video Sequence Editor
+
+**VSE_Transcribe** is a modular Blender addon for transcribing audio and turning the result into synchronized, editable subtitles directly inside the **Video Sequence Editor (VSE)**.
+
+Instead of exporting the audio to another application, generating subtitles externally and importing them back, VSE_Transcribe keeps the workflow inside Blender.
+
+The transcription engine produces structured timestamped data, which is then converted into native Blender **Text Strips**. This keeps the subtitles part of the project itself — editable, stylable and fully integrated with the VSE timeline.
+
+> **Built for Blender. Designed for an editor-first workflow.**
+
+---
+
+## What it does
+
+VSE_Transcribe is focused on one workflow:
+
+**Audio → Transcription → Timing → Subtitles → VSE**
+
+The addon separates transcription from subtitle generation, allowing different AI engines to be used without changing the rest of the system.
+
+### Core features
+
+* AI-powered audio transcription
+* Local transcription support
+* Configurable external transcription APIs
+* Timestamp-based subtitle generation
+* Native Blender Text Strips
+* Subtitle styling and layout controls
+* Language configuration
+* Word-level timestamps
+* Modular transcription engine architecture
+* N-panel integration
+* Subtitle export architecture
+* Designed for future transcription and editing tools
+
+---
+
+## Why VSE_Transcribe?
+
+A common subtitle workflow looks like this:
+
+```text
+Video
+  ↓
+Export audio
+  ↓
+External transcription tool
+  ↓
+Generate subtitles
+  ↓
+Export SRT / VTT / ASS
+  ↓
+Import into Blender
+  ↓
+Adjust everything again
+```
+
+VSE_Transcribe aims to reduce that workflow to:
+
+```text
+Video
+  ↓
 VSE_Transcribe
+  ↓
+Transcription
+  ↓
+Native Text Strips
+  ↓
+Edit in Blender
+```
 
-<div align="center">
+The goal isn't to replace Blender's VSE with another editor.
 
-VSE_Transcribe
+The goal is to make the VSE better at handling transcription-based workflows.
 
-AI-powered transcription and subtitle generation for Blender VSE
+---
 
+# Architecture
 
+VSE_Transcribe is built around a separation between **transcription**, **data**, and **Blender integration**.
 
+```text
+                         VSE_Transcribe
+                               │
+                    ┌──────────┴──────────┐
+                    │                     │
+              Transcription            VSE Layer
+                 Engine                    │
+                    │                     │
+          ┌─────────┴─────────┐           │
+          │                   │           │
+     Local Engine        External API     │
+          │                   │           │
+          └─────────┬─────────┘           │
+                    │                     │
+                    ▼                     │
+                Transcript ───────────────┘
+                    │
+                    ▼
+             Subtitle Engine
+                    │
+                    ▼
+             Blender Text Strips
+```
 
+The important part is the **Transcript** layer.
 
+The subtitle system does not need to know whether the text came from Whisper, an external API or another engine.
 
+Every engine produces the same internal data structure.
 
-Developed by Italo Nicacio
+This makes the system easier to extend without coupling the entire addon to a single AI provider.
 
-</div>
+---
 
-Sobre
+# Transcription Engines
 
-VSE_Transcribe é um addon modular para o Blender Video Sequence Editor (VSE) focado em transcrição automática por IA e geração de legendas diretamente na timeline.
+VSE_Transcribe is designed around interchangeable transcription engines.
 
-A proposta é aproveitar a infraestrutura nativa do VSE em vez de criar um editor de vídeo separado. O addon transforma uma transcrição sincronizada em Text Strips nativas do Blender, mantendo as legendas editáveis dentro do próprio projeto.
+### Local
 
-Principais objetivos
+Local engines process the audio on the user's machine.
 
-🎙️ Transcrição automática por IA
+Typical implementation:
 
-🧠 Engine híbrida: IA local gratuita + API externa configurável
+```text
+Audio
+  ↓
+Whisper / faster-whisper
+  ↓
+Transcript
+```
 
-📝 Geração automática de legendas
+Advantages:
 
-⏱️ Sincronização por timestamps
+* No external API required
+* Audio can remain local
+* No mandatory subscription
+* Works without depending on a specific provider
+* Suitable for privacy-sensitive workflows
 
-🎨 Controle completo do estilo das Text Strips
+### External API
 
-🎬 Integração direta com o Blender VSE
+External services can be configured when the user prefers cloud-based transcription.
 
-🧩 Arquitetura modular e extensível
+```text
+Audio
+  ↓
+Configured API
+  ↓
+Transcript
+```
 
-⚙️ Configurações acessíveis pelo painel N
+Configuration can include:
 
-🔌 Preparado para múltiplos engines de transcrição
+* API endpoint
+* API key
+* Model
+* Language
+* Additional engine-specific options
 
-✨ Funcionalidades
+The API implementation remains isolated from the rest of the addon.
 
-🎙️ Transcrição por IA
+---
 
-O VSE_Transcribe será capaz de utilizar diferentes engines sem prender o restante do addon a uma implementação específica.
+# Transcript Model
 
-                    VSE_Transcribe
-                          │
-                 ┌────────┴────────┐
-                 │ Transcription   │
-                 │    Interface    │
-                 └────────┬────────┘
-                          │
-             ┌────────────┴────────────┐
-             │                         │
-             ▼                         ▼
-      Local Whisper              External API
-      ─────────────              ────────────
-      Gratuito                   Configurável
-      Offline                    API Key
-      Privado                    Endpoint
+Transcription results are represented as structured data rather than plain text.
 
-📝 Geração de legendas
+Conceptually:
 
-A transcrição será convertida em segmentos sincronizados:
+```text
+Transcript
+├── language
+├── duration
+└── segments
+    ├── start
+    ├── end
+    ├── text
+    └── words
+        ├── text
+        ├── start
+        └── end
+```
 
+Example:
+
+```text
 00:00:01.200 → 00:00:03.800
 "Olá pessoal, tudo bem?"
 
 00:00:04.000 → 00:00:07.200
 "Hoje vamos aprender a editar no Blender."
+```
 
-Cada segmento poderá ser convertido em uma Text Strip do VSE.
+Keeping timing information at the data level makes the system suitable for future features such as:
 
-🎨 Estilo das legendas
+* Word highlighting
+* Text-based editing
+* Animated captions
+* Precise subtitle segmentation
+* Search-based navigation
+* Advanced subtitle timing tools
 
-O painel próprio do addon permitirá controlar as propriedades das legendas, incluindo:
+---
 
-Fonte
+# Subtitle Generation
 
-Tamanho
+Once a transcript has been generated, VSE_Transcribe converts its segments into Blender Text Strips.
 
-Cor
+```text
+Transcript Segment
+       │
+       ├── Start
+       ├── End
+       └── Text
+              │
+              ▼
+       Subtitle Generator
+              │
+              ▼
+        Blender Text Strip
+```
 
-Outline
+The generated strips remain native Blender objects.
 
-Sombra
+That means they can still be:
 
-Fundo/Box
+* Moved
+* Trimmed
+* Duplicated
+* Edited
+* Styled
+* Animated
+* Repositioned
 
-Posição
+directly from the VSE.
 
-Alinhamento
+---
 
-Quebra de linhas
+# Subtitle Styling
 
-Limite de caracteres
+Subtitle appearance is controlled from the addon interface before generation.
 
-Configurações de timing
+Planned controls include:
 
-As Text Strips continuam sendo objetos nativos do Blender e podem ser editadas manualmente depois da geração.
+| Property       | Description                 |
+| -------------- | --------------------------- |
+| Font           | Text font                   |
+| Size           | Font size                   |
+| Color          | Text color                  |
+| Outline        | Outline width               |
+| Shadow         | Shadow visibility           |
+| Background     | Subtitle background / box   |
+| Position       | Screen position             |
+| Alignment      | Text alignment              |
+| Max Characters | Maximum characters per line |
+| Max Lines      | Maximum number of lines     |
+| Timing         | Segment timing behavior     |
 
-🧠 Arquitetura
+The styling system is intended to support reusable subtitle presets in the future.
 
-O projeto foi pensado para ser modular desde o início.
+---
 
+# Blender Integration
+
+VSE_Transcribe is designed around Blender's existing systems instead of creating parallel representations of the timeline.
+
+Primary integration points include:
+
+* Video Sequence Editor
+* Text Strips
+* Blender Properties
+* Operators
+* N-panel
+* Menus
+* Blender Python API
+
+The main interface is exposed through the VSE Sidebar:
+
+```text
+VSE
+└── Sidebar (N)
+    └── VSE_Transcribe
+        ├── Engine
+        ├── Model
+        ├── Language
+        ├── Transcription
+        └── Subtitles
+```
+
+---
+
+# Project Structure
+
+```text
 VSE_Transcribe/
 │
 ├── __init__.py
@@ -145,465 +333,310 @@ VSE_Transcribe/
     ├── audio.py
     ├── paths.py
     └── logging.py
+```
 
-__init__.py
+### Module responsibilities
 
-O __init__.py central é responsável por registrar e remover os componentes do addon:
+| Directory     | Responsibility                  |
+| ------------- | ------------------------------- |
+| `core/`       | Core application logic          |
+| `engines/`    | Transcription implementations   |
+| `models/`     | Transcript and data structures  |
+| `operators/`  | Blender operators               |
+| `panels/`     | Sidebar and panel UI            |
+| `properties/` | Blender properties and settings |
+| `ui/`         | Menus and interface elements    |
+| `utils/`      | Shared utilities                |
 
-Blender
-  │
-  ▼
-VSE_Transcribe/__init__.py
-  │
-  ├── Properties
-  ├── Operators
-  ├── Panels
-  ├── Menus
-  │
-  └── Registration / Unregistration
+The central `__init__.py` is responsible primarily for addon registration and unregistration.
 
-A lógica de cada sistema permanece separada nos respectivos módulos.
+The implementation of each subsystem remains isolated in its respective module.
 
-🧠 Modelo de dados
+---
 
-A transcrição não será armazenada apenas como texto.
+# Installation
 
-O objetivo é trabalhar com uma estrutura semelhante a:
+## From GitHub
 
-Transcript
-│
-├── language
-├── duration
-│
-└── segments
-    │
-    ├── start
-    ├── end
-    ├── text
-    │
-    └── words
-        ├── text
-        ├── start
-        └── end
+Clone the repository:
 
-Isso permite manter precisão temporal e deixa a arquitetura preparada para recursos futuros, como edição baseada em texto, destaque de palavras e animações sincronizadas.
+```bash
+git clone <REPOSITORY_URL>
+```
 
-🛠️ Tecnologias
+Or download the repository as a ZIP file.
 
-<div align="center">
+## Install in Blender
 
+Open:
 
-
-
-
-
-
-</div>
-
-Algumas dependências de IA ainda estão sendo definidas durante o desenvolvimento. A implementação final poderá variar conforme o engine escolhido.
-
-📦 Compatibilidade
-
-Componente
-
-Suporte
-
-Blender
-
-5.2+
-
-Sistema operacional
-
-Windows / Linux / macOS
-
-Interface
-
-Blender Python API
-
-Editor
-
-Video Sequence Editor
-
-Transcrição local
-
-Whisper / faster-whisper
-
-Transcrição externa
-
-API configurável
-
-Legendas
-
-Blender Text Strips
-
-Idiomas
-
-Depende do engine de IA
-
-🚀 Instalação
-
-1. Baixe o projeto
-
-Clone o repositório:
-
-git clone <URL_DO_REPOSITORIO>
-
-Ou baixe o projeto como ZIP pelo GitHub.
-
-2. Instale no Blender
-
-No Blender:
-
+```text
 Edit
- └── Preferences
-      └── Add-ons
-           └── Install...
+└── Preferences
+    └── Add-ons
+        └── Install...
+```
 
-Selecione o arquivo ZIP do VSE_Transcribe.
+Select the VSE_Transcribe ZIP file.
 
-Depois:
+Then enable:
 
+```text
 Preferences
- └── Add-ons
-      └── VSE_Transcribe
-           ☑ Enable
+└── Add-ons
+    └── VSE_Transcribe
+        └── Enable
+```
 
-Durante o desenvolvimento, também é possível trabalhar diretamente com a pasta do addon no diretório de addons do Blender.
+During development, the addon can also be loaded directly from Blender's addons directory.
 
-🎬 Como usar
+---
 
-1. Abra o Video Sequence Editor
+# Basic Workflow
 
-No Blender:
+## 1. Open the Video Sequence Editor
 
-Shift + F3
+Switch an area to:
 
-ou altere qualquer área para:
-
+```text
 Video Editing
+```
 
-2. Adicione o vídeo
+or open the VSE workspace.
 
-No VSE:
+## 2. Add your media
 
+Add a movie or audio strip containing the audio you want to transcribe.
+
+```text
 Add
- └── Movie
+└── Movie
+```
 
-Selecione o vídeo que deseja transcrever.
+## 3. Open VSE_Transcribe
 
-O áudio precisa estar disponível para o engine de transcrição.
+With the mouse over the VSE, press:
 
-3. Abra o painel do VSE_Transcribe
-
-Com o mouse sobre o VSE:
-
+```text
 N
+```
 
-Isso abre a Sidebar.
+Open the:
 
-Procure:
-
+```text
 VSE_Transcribe
+```
 
-4. Escolha o engine
+panel.
 
-O addon terá suporte para dois tipos principais:
+## 4. Select a transcription engine
 
-Local
+Choose between an available local engine or a configured external API.
 
-Engine:
-[ Local Whisper ▼ ]
+Example:
 
-A transcrição será processada localmente, sem necessidade de enviar o áudio para um serviço externo.
+```text
+Engine       [ Local Whisper ▼ ]
+Model        [ ...             ]
+Language     [ Auto            ]
 
-API externa
+             [ TRANSCRIBE ]
+```
 
-Engine:
-[ External API ▼ ]
+## 5. Generate the transcript
 
-API URL:
-[ https://... ]
+The selected engine processes the audio and returns timestamped segments.
 
-API Key:
-[ ******** ]
+## 6. Create subtitles
 
-Model:
-[ ... ]
+After transcription:
 
-A API será configurável pelo usuário.
-
-5. Transcreva
-
-Com o vídeo selecionado:
-
-VSE_Transcribe
-│
-├── Engine
-├── Model
-├── Language
-│
-└── [ TRANSCRIBE ]
-
-O engine processará o áudio e retornará os segmentos com seus timestamps.
-
-6. Gere as legendas
-
-Depois da transcrição:
-
+```text
 SUBTITLES
 
 [ CREATE SUBTITLES ]
+```
 
-O addon criará automaticamente as Text Strips correspondentes aos segmentos.
+VSE_Transcribe creates the corresponding Text Strips directly in the timeline.
 
-Exemplo:
+```text
+VIDEO    ███████████████████████████████████
 
-VSE TIMELINE
+AUDIO    ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
 
-VIDEO
-████████████████████████████████████
+TEXT     ░░ "Olá pessoal..." ░░
+                  ░░ "Hoje vamos..." ░░
+```
 
-AUDIO
-▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓
+From this point onward, the subtitles are part of the Blender project.
 
-CAPTIONS
-░░░░ "Olá pessoal..." ░░░░
-              ░░░░ "Hoje vamos..." ░░░░
+---
 
-🎨 Configuração das legendas
+# Privacy
 
-Antes de gerar as Text Strips, o usuário poderá configurar o estilo no painel:
+VSE_Transcribe does not require a cloud transcription service as its only option.
 
-STYLE
+When a local engine is used, transcription can be performed on the user's machine.
 
-Font
-[ Blender Font ▼ ]
+When an external API is selected, the audio is handled according to the configuration and privacy policy of that service.
 
-Size
-[ 48 ]
+The addon itself is designed to keep the transcription provider separate from the subtitle workflow.
 
-Color
-[ █████████ ]
+---
 
-Outline
-[ 2.0 ]
+# Export
 
-Shadow
-[ ✓ ]
+Subtitle export is part of the project's architecture and will be handled independently from subtitle generation.
 
-Background
-[ ✓ ]
+Planned formats include:
 
-Position
-[ Center / Bottom ▼ ]
-
-Alignment
-[ Center ▼ ]
-
-Max Characters
-[ 42 ]
-
-Max Lines
-[ 2 ]
-
-As configurações serão aplicadas às novas legendas geradas.
-
-Depois da criação, cada Text Strip continua editável diretamente pelo Blender.
-
-🔌 Engine híbrida
-
-O sistema de transcrição foi projetado para não depender de um único fornecedor.
-
-Local
-
-LocalWhisperEngine
-        │
-        ▼
-Áudio
-        │
-        ▼
-Whisper / faster-whisper
-        │
-        ▼
-Transcript
-
-API
-
-ExternalAPIEngine
-        │
-        ▼
-Áudio
-        │
-        ▼
-API configurada pelo usuário
-        │
-        ▼
-Transcript
-
-Ambos devem retornar uma estrutura comum para o restante do addon.
-
-Isso significa que o sistema de legendas não precisa saber qual IA foi utilizada.
-
-🔒 Privacidade
-
-Quando o usuário utilizar o engine local, o áudio poderá ser processado localmente.
-
-Quando uma API externa for selecionada, o áudio poderá ser enviado ao serviço configurado pelo usuário.
-
-O VSE_Transcribe não deve exigir uma API paga para funcionar quando o engine local estiver disponível.
-
-📤 Exportação
-
-A arquitetura já reserva um módulo para exportação:
-
-operators/export_subtitles.py
-
-O objetivo é permitir futuramente:
-
+```text
 SRT
-
 VTT
-
 ASS
+```
 
-Outros formatos compatíveis
+Additional formats may be supported later.
 
-A implementação de exportação será adicionada conforme o desenvolvimento avançar.
+---
 
-🗺️ Roadmap
+# Roadmap
 
-V0.1 — Core
+The project is being developed incrementally.
 
-Estrutura modular
+### V0.1 — Foundation
 
-Sistema central de registro
+* [x] Modular addon structure
+* [x] Central registration system
+* [x] Settings architecture
+* [x] VSE Sidebar integration
+* [x] Transcription engine interface
+* [x] Transcript data model
 
-Settings
+### V0.2 — Transcription
 
-N Panel
+* [ ] Local transcription engine
+* [ ] External API engine
+* [ ] Language configuration
+* [ ] Timestamp handling
+* [ ] Word-level timestamps
+* [ ] Error handling
 
-Interface de engines
+### V0.3 — Subtitles
 
-Modelo de transcript
+* [ ] Automatic segmentation
+* [ ] Text Strip generation
+* [ ] Subtitle styling
+* [ ] Character limits
+* [ ] Line limits
+* [ ] Positioning
+* [ ] Subtitle presets
 
-V0.2 — Transcrição
+### V0.4 — Export
 
-Engine local
+* [ ] SRT
+* [ ] VTT
+* [ ] ASS
 
-Engine externo
+### Future
 
-Detecção de idioma
+Possible future directions include:
 
-Timestamps
+* Text-based editing
+* Word-level subtitle animation
+* Advanced caption presets
+* Timeline search through transcript
+* AI-assisted editing tools
+* Integration with other Blender addons
 
-Word-level timestamps
+These features are intentionally outside the initial scope.
 
-Tratamento de erros
+The current priority is to build a reliable transcription and subtitle foundation first.
 
-V0.3 — Legendas
+---
 
-Segmentação automática
+# Development
 
-Criação de Text Strips
+VSE_Transcribe uses a modular architecture so new components can be added without rewriting the existing workflow.
 
-Estilos
+New transcription engines should implement the interface defined in:
 
-Controle de linhas
-
-Controle de caracteres
-
-Posicionamento
-
-Aplicação de presets
-
-V0.4 — Exportação
-
-SRT
-
-VTT
-
-ASS
-
-Futuro
-
-Recursos como edição baseada em transcrição e ferramentas avançadas de edição por IA não fazem parte do escopo inicial. O foco atual é construir um sistema de transcrição + legendagem profissional e sólido.
-
-🤝 Desenvolvimento
-
-O projeto utiliza uma arquitetura modular para facilitar:
-
-novos engines de IA;
-
-novos formatos de legenda;
-
-novos estilos;
-
-novos operadores;
-
-novas interfaces;
-
-integração futura com outras ferramentas do Blender.
-
-Novos engines devem implementar a interface definida em:
-
+```text
 engines/base.py
+```
 
-A lógica de negócio deve permanecer em core/, enquanto os operadores do Blender ficam em operators/.
+Core application logic belongs in:
 
-📁 Organização do código
-
-Diretório
-
-Responsabilidade
-
+```text
 core/
+```
 
-Lógica principal
+Blender-specific operators belong in:
 
-engines/
-
-Engines de transcrição
-
-models/
-
-Estruturas de dados
-
+```text
 operators/
+```
 
-Operadores Blender
+This separation keeps the transcription layer independent from Blender's UI and timeline implementation.
 
-panels/
+---
 
-Interface do painel N
+# Compatibility
 
-properties/
+| Component              | Support                         |
+| ---------------------- | ------------------------------- |
+| Blender                | 5.2+                            |
+| Operating Systems      | Windows / Linux / macOS         |
+| Interface              | Blender Python API              |
+| Editor                 | Video Sequence Editor           |
+| Local transcription    | Whisper / faster-whisper        |
+| External transcription | Configurable API                |
+| Subtitle system        | Blender Text Strips             |
+| Languages              | Depends on transcription engine |
 
-Configurações
+> Compatibility may change as Blender and the supported transcription engines evolve.
 
-ui/
+---
 
-Menus e elementos de interface
+# Project Status
 
-utils/
+VSE_Transcribe is currently under active development.
 
-Utilitários
+The architecture is being established before expanding the feature set, with particular attention to:
 
-👤 Autor
+* Modular engines
+* Reliable timestamp handling
+* Native Blender integration
+* Editable subtitle output
+* Extensibility
+* Local-first workflows
 
-Italo Nicacio
+The project is not intended to become a separate video editor.
 
+**It is a transcription and subtitle layer built specifically for the Blender VSE.**
 
+---
 
-📄 Licença
+# Author
 
-A licença do projeto será definida antes do primeiro release público.
+**Italo Nicacio**
+
+Full Stack Developer · Software Architecture · Open Source
+
+---
+
+# License
+
+The project license will be defined before the first public release.
+
+---
 
 <div align="center">
 
-VSE_Transcribe
+**VSE_Transcribe**
 
 AI transcription and subtitle generation for Blender VSE.
 
-Made with Python and Blender.
+Built with Python and the Blender Python API.
 
 </div>
