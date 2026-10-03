@@ -627,7 +627,9 @@ Full Stack Developer · Software Architecture · Open Source
 
 # License
 
-The project license will be defined before the first public release.
+VSE_Transcribe is released under the **MIT License**.
+
+See the [`LICENSE`](LICENSE) file for the full license text.
 
 ---
 
@@ -640,3 +642,4 @@ AI transcription and subtitle generation for Blender VSE.
 Built with Python and the Blender Python API.
 
 </div>
+
