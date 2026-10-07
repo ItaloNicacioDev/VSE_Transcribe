@@ -233,9 +233,16 @@ def extract_audio_from_strips(
         pass
     finally:
         # Restore settings
-        scene.render.ffmpeg.audio_codec = original_audio_codec
-        scene.render.ffmpeg.audio_bitrate = original_audio_bitrate
-        scene.render.ffmpeg.audio_sample_rate = original_audio_samplerate
+        if original_audio_codec is not None:
+            scene.render.ffmpeg.audio_codec = original_audio_codec
+        if original_audio_bitrate is not None:
+            scene.render.ffmpeg.audio_bitrate = original_audio_bitrate
+        # Restore sample rate with correct attribute name
+        if original_audio_samplerate is not None:
+            if hasattr(scene.render.ffmpeg, "audio_sample_rate"):
+                scene.render.ffmpeg.audio_sample_rate = original_audio_samplerate
+            elif hasattr(scene.render.ffmpeg, "audio_samplerate"):
+                scene.render.ffmpeg.audio_samplerate = original_audio_samplerate
         scene.render.filepath = original_filepath
         scene.render.image_settings.file_format = original_format
         scene.frame_start = original_frame_start
