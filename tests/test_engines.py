@@ -14,9 +14,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-# Add project root to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+# Setup stub package to avoid bpy import from VSE_Transcrib.__init__
+import types
+stub_pkg = types.ModuleType('VSE_Transcrib')
+stub_pkg.__path__ = [str(Path(__file__).parent.parent)]
+sys.modules['VSE_Transcrib'] = stub_pkg
 
+# Now import the modules we need
 from VSE_Transcrib.engines.local_whisper import LocalWhisperConfig, LocalWhisperEngine
 from VSE_Transcrib.engines.external_api import ExternalAPIConfig, ExternalAPIEngine
 from VSE_Transcrib.models.transcript import Transcript, TranscriptSegment, TranscriptWord
@@ -27,7 +31,7 @@ class TestLocalWhisperEngine:
 
     def test_import_without_bpy(self):
         """Engine should import without bpy dependency."""
-        from engines import local_whisper
+        from VSE_Transcrib.engines import local_whisper
         assert local_whisper.LocalWhisperEngine is not None
 
     def test_config_valid_model_size(self):
@@ -75,7 +79,7 @@ class TestLocalWhisperEngine:
     def test_wrong_config_type_raises(self):
         """Passing wrong config type should raise TypeError."""
         engine = LocalWhisperEngine()
-        from engines.base import EngineConfig
+        from VSE_Transcrib.engines.base import EngineConfig
         config = EngineConfig()
         with pytest.raises(TypeError, match="Expected LocalWhisperConfig"):
             engine._validate_config(config)
@@ -83,7 +87,7 @@ class TestLocalWhisperEngine:
     def test_transcribe_wrong_config_type_raises(self):
         """transcribe with wrong config type should raise TypeError."""
         engine = LocalWhisperEngine()
-        from engines.base import EngineConfig
+        from VSE_Transcrib.engines.base import EngineConfig
         config = EngineConfig()
         with pytest.raises(TypeError, match="Expected LocalWhisperConfig"):
             engine.transcribe("/fake/path.wav", config)
@@ -121,7 +125,7 @@ class TestExternalAPIEngine:
 
     def test_import_without_bpy(self):
         """Engine should import without bpy dependency."""
-        from engines import external_api
+        from VSE_Transcrib.engines import external_api
         assert external_api.ExternalAPIEngine is not None
 
     def test_config_valid_endpoint_and_key(self):
@@ -161,7 +165,7 @@ class TestExternalAPIEngine:
     def test_wrong_config_type_raises(self):
         """Passing wrong config type should raise TypeError."""
         engine = ExternalAPIEngine()
-        from engines.base import EngineConfig
+        from VSE_Transcrib.engines.base import EngineConfig
         config = EngineConfig()
         with pytest.raises(TypeError, match="Expected ExternalAPIConfig"):
             engine._validate_config(config)
@@ -169,7 +173,7 @@ class TestExternalAPIEngine:
     def test_transcribe_wrong_config_type_raises(self):
         """transcribe with wrong config type should raise TypeError."""
         engine = ExternalAPIEngine()
-        from engines.base import EngineConfig
+        from VSE_Transcrib.engines.base import EngineConfig
         config = EngineConfig()
         with pytest.raises(TypeError, match="Expected ExternalAPIConfig"):
             engine.transcribe("/fake/path.wav", config)
