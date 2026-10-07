@@ -28,3 +28,11 @@ properties/__pycache__/__init__.cpython-314.pyc
 
 .tests/*
 tests/test_engines.py
+core/__pycache__/strip_manager.cpython-314.pyc
+core/__pycache__/timecode.cpython-314.pyc
+ui/__pycache__/__init__.cpython-314.pyc
+ui/__pycache__/menus.cpython-314.pyc
+utils/__pycache__/__init__.cpython-314.pyc
+utils/__pycache__/audio.cpython-314.pyc
+utils/__pycache__/logging.cpython-314.pyc
+utils/__pycache__/paths.cpython-314.pyc
