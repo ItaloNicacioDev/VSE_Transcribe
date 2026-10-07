@@ -119,7 +119,7 @@ class ExternalAPIProps(PropertyGroup):
         name="API Endpoint",
         description="Transcription API endpoint URL",
         default="https://api.openai.com/v1/audio/transcriptions",
-        subtype="URL",
+        # subtype="URL" not valid in Blender 5.2; using NONE
     )
 
     api_key: StringProperty(
