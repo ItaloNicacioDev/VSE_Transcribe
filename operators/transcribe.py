@@ -145,8 +145,9 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
             return None
 
         # Check selected strips first (SOUND and MOVIE types have audio)
-        for strip in context.selected_sequences:
-            if strip.type in {"SOUND", "MOVIE"}:
+        # In Blender 5.2+, use strip.select on sequences_all
+        for strip in seq_editor.sequences_all:
+            if strip.select and strip.type in {"SOUND", "MOVIE"}:
                 return strip
 
         # Also check active strip
