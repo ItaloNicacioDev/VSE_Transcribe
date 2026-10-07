@@ -39,8 +39,10 @@ class LocalWhisperEngine(TranscriptionEngine):
 
     name = "local_whisper"
 
-    def _validate_config(self, config: LocalWhisperConfig) -> None:
+    def _validate_config(self, config: EngineConfig) -> None:
         """Validate engine configuration."""
+        if not isinstance(config, LocalWhisperConfig):
+            raise TypeError(f"Expected LocalWhisperConfig, got {type(config).__name__}")
         if config.model_size not in VALID_MODEL_SIZES:
             raise ValueError(
                 f"model_size must be one of {VALID_MODEL_SIZES}, got '{config.model_size}'"
@@ -68,8 +70,10 @@ class LocalWhisperEngine(TranscriptionEngine):
             pass
         return False
 
-    def transcribe(self, audio_path: str, config: LocalWhisperConfig) -> Transcript:
+    def transcribe(self, audio_path: str, config: EngineConfig) -> Transcript:
         """Transcribe audio using faster-whisper (preferred) or whisper."""
+        if not isinstance(config, LocalWhisperConfig):
+            raise TypeError(f"Expected LocalWhisperConfig, got {type(config).__name__}")
         self._validate_config(config)
 
         if not self._check_dependencies():
