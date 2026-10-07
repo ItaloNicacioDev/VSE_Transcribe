@@ -80,6 +80,23 @@ class VSETRANSCRIBE_PT_sidebar(Panel):
         box = layout.box()
         box.label(text="Source Strip", icon="SEQ_SEQUENCER")
 
+        # DEBUG: Show all strips found in timeline
+        debug_box = box.box()
+        debug_box.label(text="Debug: All Strips in Timeline", icon="INFO")
+        try:
+            seq_editor = context.scene.sequence_editor
+            if seq_editor:
+                for i, s in enumerate(seq_editor.sequences_all):
+                    row = debug_box.row()
+                    row.scale_y = 0.7
+                    sel_mark = " ✓" if s.select else ""
+                    act_mark = " ★" if seq_editor.active_strip == s else ""
+                    row.label(text=f"{i}: {s.name} | Type: {s.type} | Ch:{s.channel}{sel_mark}{act_mark}")
+            else:
+                debug_box.label(text="No sequence editor")
+        except Exception as e:
+            debug_box.label(text=f"Debug error: {e}")
+
         if strip:
             # Show strip info prominently
             row = box.row()
