@@ -85,10 +85,11 @@ def extract_audio_from_strip(
         for seq in _get_sequences(seq_editor):
             seq.mute = (seq != strip)
 
-    # Configure for WAV export
+    # Configure for WAV export (using MKV container with PCM audio in Blender 5.2+)
     scene.render.filepath = output_path
     scene.render.image_settings.file_format = "FFMPEG"
-    scene.render.ffmpeg.format = "WAV"
+    # Blender 5.2+ doesn't have WAV in ffmpeg.format enum, use MKV which supports PCM audio
+    scene.render.ffmpeg.format = "MKV"
     scene.render.ffmpeg.audio_codec = "PCM"
     scene.render.ffmpeg.audio_bitrate = 128
     # Try both attribute names for sample rate
@@ -194,10 +195,11 @@ def extract_audio_from_strips(
     original_mutes = {seq: seq.mute for seq in _get_sequences(seq_editor)}
 
     try:
-        # Configure for WAV export
+        # Configure for WAV export (using MKV container with PCM audio in Blender 5.2+)
         scene.render.filepath = output_path
         scene.render.image_settings.file_format = "FFMPEG"
-        scene.render.ffmpeg.format = "WAV"
+        # Blender 5.2+ doesn't have WAV in ffmpeg.format enum, use MKV which supports PCM audio
+        scene.render.ffmpeg.format = "MKV"
         scene.render.ffmpeg.audio_codec = "PCM"
         scene.render.ffmpeg.audio_bitrate = 128
         # Try both attribute names for sample rate
