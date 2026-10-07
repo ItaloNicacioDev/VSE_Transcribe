@@ -95,11 +95,34 @@ def register_menus() -> None:
     bpy.utils.register_class(VSETRANSCRIBE_MT_main_menu)
     bpy.utils.register_class(VSETRANSCRIBE_MT_export_menu)
 
-    # Append to VSE header menu
-    bpy.types.SEQUENCE_MT_editor_menus.append(menu_draw)
+    # Append to VSE header menu - try different menu names for Blender version compatibility
+    menu_targets = [
+        "SEQUENCE_MT_editor_menus",
+        "SEQUENCE_MT_menu",
+        "SEQUENCE_MT_view",
+    ]
+
+    for menu_name in menu_targets:
+        try:
+            menu = getattr(bpy.types, menu_name)
+            menu.append(menu_draw)
+            break
+        except AttributeError:
+            continue
 
     # Also add to strip context menu (right-click on strip)
-    bpy.types.SEQUENCE_MT_strip.append(menu_draw)
+    strip_menu_targets = [
+        "SEQUENCE_MT_strip",
+        "SEQUENCE_MT_strip_context_menu",
+    ]
+
+    for menu_name in strip_menu_targets:
+        try:
+            menu = getattr(bpy.types, menu_name)
+            menu.append(menu_draw)
+            break
+        except AttributeError:
+            continue
 
 
 def unregister_menus() -> None:
@@ -107,16 +130,32 @@ def unregister_menus() -> None:
     if not _HAS_BPY:
         return
 
-    # Remove from VSE menus
-    try:
-        bpy.types.SEQUENCE_MT_editor_menus.remove(menu_draw)
-    except Exception:
-        pass
+    # Remove from VSE menus - try all possible targets
+    menu_targets = [
+        "SEQUENCE_MT_editor_menus",
+        "SEQUENCE_MT_menu",
+        "SEQUENCE_MT_view",
+    ]
 
-    try:
-        bpy.types.SEQUENCE_MT_strip.remove(menu_draw)
-    except Exception:
-        pass
+    for menu_name in menu_targets:
+        try:
+            menu = getattr(bpy.types, menu_name)
+            menu.remove(menu_draw)
+        except (AttributeError, ValueError):
+            pass
+
+    # Remove from strip context menu
+    strip_menu_targets = [
+        "SEQUENCE_MT_strip",
+        "SEQUENCE_MT_strip_context_menu",
+    ]
+
+    for menu_name in strip_menu_targets:
+        try:
+            menu = getattr(bpy.types, menu_name)
+            menu.remove(menu_draw)
+        except (AttributeError, ValueError):
+            pass
 
     bpy.utils.unregister_class(VSETRANSCRIBE_MT_export_menu)
     bpy.utils.unregister_class(VSETRANSCRIBE_MT_main_menu)
