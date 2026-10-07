@@ -229,16 +229,22 @@ class VSETRANSCRIBE_PT_sidebar(Panel):
             if not seq_editor:
                 return None
 
-            # Check selected strips first (SOUND and MOVIE types have audio)
-            # In Blender 5.2+, use strip.select on sequences_all
+            # Strategy 1: Check selected strips (Blender 5.2+)
             for strip in seq_editor.sequences_all:
                 if strip.select and strip.type in {"SOUND", "MOVIE"}:
                     return strip
 
-            # Also check active strip
+            # Strategy 2: Check active strip
             active = seq_editor.active_strip
             if active and active.type in {"SOUND", "MOVIE"}:
                 return active
+
+            # Strategy 3: Fallback - any SOUND/MOVIE strip in the timeline
+            # (user may have clicked away but video is still there)
+            for strip in seq_editor.sequences_all:
+                if strip.type in {"SOUND", "MOVIE"}:
+                    return strip
+
         except Exception:
             pass
 
