@@ -101,7 +101,7 @@ class TranscriptionEngine(ABC):
             config: Engine configuration to validate.
 
         Raises:
-            ValueError: If config is invalid.
+            InvalidConfigError: If config is invalid.
         """
         pass
 
@@ -118,7 +118,7 @@ class TranscriptionEngine(ABC):
 
         Raises:
             EngineNotAvailableError: If the engine's dependencies are not available.
-            RuntimeError: If transcription fails.
+            TranscriptionError: If transcription fails.
         """
         pass
 
