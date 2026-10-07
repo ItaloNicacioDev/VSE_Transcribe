@@ -81,42 +81,49 @@ def extract_audio_from_strip(
     # Ensure directory exists
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
 
-    # Store original render settings
+    # Store original render settings (before try for finally access)
     original_audio_codec = getattr(scene.render.ffmpeg, "audio_codec", None)
     original_audio_bitrate = getattr(scene.render.ffmpeg, "audio_bitrate", None)
-    # audio_sample_rate may be audio_samplerate in Blender 5.2+
     original_audio_samplerate = getattr(scene.render.ffmpeg, "audio_sample_rate", None)
     if original_audio_samplerate is None:
         original_audio_samplerate = getattr(scene.render.ffmpeg, "audio_samplerate", None)
     original_filepath = scene.render.filepath
     original_format = scene.render.image_settings.file_format
+    original_frame_start = scene.frame_start
+    original_frame_end = scene.frame_end
 
+    # Mute all other sequences
+    seq_editor = scene.sequence_editor
+    if seq_editor:
+        for seq in seq_editor.sequences_all:
+            seq.mute = (seq != strip)
+
+    # Configure for WAV export
+    scene.render.filepath = output_path
+    scene.render.image_settings.file_format = "FFMPEG"
+    scene.render.ffmpeg.format = "WAV"
+    scene.render.ffmpeg.audio_codec = "PCM"
+    scene.render.ffmpeg.audio_bitrate = 128
+    # Try both attribute names for sample rate
+    if hasattr(scene.render.ffmpeg, "audio_sample_rate"):
+        scene.render.ffmpeg.audio_sample_rate = sample_rate
+    elif hasattr(scene.render.ffmpeg, "audio_samplerate"):
+        scene.render.ffmpeg.audio_samplerate = sample_rate
+
+    # Set frame range to strip duration
+    original_frame_start = scene.frame_start
+    original_frame_end = scene.frame_end
+    scene.frame_start = int(strip.frame_final_start)
+    scene.frame_end = int(strip.frame_final_end)
+
+    # Mute all other sequences
+    seq_editor = scene.sequence_editor
+    if seq_editor:
+        for seq in seq_editor.sequences_all:
+            seq.mute = (seq != strip)
+
+    # Render audio
     try:
-        # Configure for WAV export
-        scene.render.filepath = output_path
-        scene.render.image_settings.file_format = "FFMPEG"
-        scene.render.ffmpeg.format = "WAV"
-        scene.render.ffmpeg.audio_codec = "PCM"
-        scene.render.ffmpeg.audio_bitrate = 128
-        # Try both attribute names for sample rate
-        if hasattr(scene.render.ffmpeg, "audio_sample_rate"):
-            scene.render.ffmpeg.audio_sample_rate = sample_rate
-        elif hasattr(scene.render.ffmpeg, "audio_samplerate"):
-            scene.render.ffmpeg.audio_samplerate = sample_rate
-
-        # Set frame range to strip duration
-        original_frame_start = scene.frame_start
-        original_frame_end = scene.frame_end
-        scene.frame_start = int(strip.frame_final_start)
-        scene.frame_end = int(strip.frame_final_end)
-
-        # Mute all other sequences
-        seq_editor = scene.sequence_editor
-        if seq_editor:
-            for seq in seq_editor.sequences_all:
-                seq.mute = (seq != strip)
-
-        # Render audio
         bpy.ops.render.render(animation=True, write_still=False)
 
         # Verify output
