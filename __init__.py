@@ -5,7 +5,11 @@ AI-powered transcription and subtitle generation for the Blender Video Sequence 
 
 from __future__ import annotations
 
-import bpy
+try:
+    import bpy
+    _HAS_BPY = True
+except ImportError:
+    _HAS_BPY = False
 
 # Import all modules to register their classes
 from . import properties
@@ -51,6 +55,9 @@ CLASSES = (
 
 def register() -> None:
     """Register all VSE_Transcribe classes and properties."""
+    if not _HAS_BPY:
+        raise RuntimeError("Cannot register: not running inside Blender")
+
     # Register properties first (operators/panels depend on them)
     properties.register_properties()
 
@@ -67,6 +74,9 @@ def register() -> None:
 
 def unregister() -> None:
     """Unregister all VSE_Transcribe classes and properties."""
+    if not _HAS_BPY:
+        return
+
     # Unregister menus first
     try:
         from . import ui
