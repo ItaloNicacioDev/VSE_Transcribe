@@ -23,3 +23,7 @@ properties/__pycache__/settings.cpython-314.pyc
 panels/__pycache__/__init__.cpython-314.pyc
 panels/__pycache__/sidebar.cpython-314.pyc
 properties/__pycache__/__init__.cpython-314.pyc
+
+
+
+tests/*
