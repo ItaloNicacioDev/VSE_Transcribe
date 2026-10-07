@@ -1,21 +1,60 @@
 """VSE_Transcribe settings for Blender.
 
 Properties stored on Scene.vse_transcribe (PointerProperty).
+Lazy bpy imports for compatibility outside Blender.
 """
 
 from __future__ import annotations
 
-import bpy
-from bpy.props import (
-    EnumProperty,
-    StringProperty,
-    BoolProperty,
-    IntProperty,
-    FloatProperty,
-    PointerProperty,
-    CollectionProperty,
-)
-from bpy.types import PropertyGroup, Scene
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import bpy
+    from bpy.props import (
+        EnumProperty,
+        StringProperty,
+        BoolProperty,
+        IntProperty,
+        FloatProperty,
+        PointerProperty,
+        CollectionProperty,
+    )
+    from bpy.types import PropertyGroup, Scene
+
+try:
+    import bpy
+    from bpy.props import (
+        EnumProperty,
+        StringProperty,
+        BoolProperty,
+        IntProperty,
+        FloatProperty,
+        PointerProperty,
+        CollectionProperty,
+    )
+    from bpy.types import PropertyGroup, Scene
+    _HAS_BPY = True
+except ImportError:
+    # Outside Blender - for syntax checking only
+    class PropertyGroup:
+        pass
+    class Scene:
+        pass
+    def EnumProperty(**kwargs):
+        return None
+    def StringProperty(**kwargs):
+        return None
+    def BoolProperty(**kwargs):
+        return None
+    def IntProperty(**kwargs):
+        return None
+    def FloatProperty(**kwargs):
+        return None
+    def PointerProperty(**kwargs):
+        return None
+    def CollectionProperty(**kwargs):
+        return None
+    _HAS_BPY = False
 
 
 class LocalWhisperProps(PropertyGroup):
@@ -212,6 +251,8 @@ class VSETranscribeSettings(PropertyGroup):
 # Registration functions
 def register_properties():
     """Register all property groups."""
+    if not _HAS_BPY:
+        return
     bpy.utils.register_class(LocalWhisperProps)
     bpy.utils.register_class(ExternalAPIProps)
     bpy.utils.register_class(SubtitleProps)
@@ -223,6 +264,8 @@ def register_properties():
 
 def unregister_properties():
     """Unregister all property groups."""
+    if not _HAS_BPY:
+        return
     if hasattr(Scene, "vse_transcribe"):
         del Scene.vse_transcribe
 
