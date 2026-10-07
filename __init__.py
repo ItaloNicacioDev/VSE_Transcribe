@@ -55,13 +55,6 @@ __version__ = "0.1.0"
 # -----------------------------------------------------------------------------
 
 CLASSES = (
-    # Properties
-    properties.LocalWhisperProps,
-    properties.ExternalAPIProps,
-    properties.SubtitleProps,
-    properties.GeneratedStripName,
-    properties.VSETranscribeSettings,
-
     # Operators
     operators.VSETRANSCRIBE_OT_transcribe,
     operators.VSETRANSCRIBE_OT_generate_subtitles,
