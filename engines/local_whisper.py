@@ -232,3 +232,8 @@ class LocalWhisperEngine(TranscriptionEngine):
                 "word_timestamps": config.word_timestamps,
             },
         )
+
+
+# Auto-register this engine
+from .base import register_engine
+register_engine("local_whisper", LocalWhisperEngine)
