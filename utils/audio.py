@@ -182,9 +182,11 @@ def extract_audio_from_strips(
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
 
     # Store original settings
-    original_audio_codec = scene.render.ffmpeg.audio_codec
-    original_audio_bitrate = scene.render.ffmpeg.audio_bitrate
-    original_audio_samplerate = scene.render.ffmpeg.audio_sample_rate
+    original_audio_codec = getattr(scene.render.ffmpeg, "audio_codec", None)
+    original_audio_bitrate = getattr(scene.render.ffmpeg, "audio_bitrate", None)
+    original_audio_samplerate = getattr(scene.render.ffmpeg, "audio_sample_rate", None)
+    if original_audio_samplerate is None:
+        original_audio_samplerate = getattr(scene.render.ffmpeg, "audio_samplerate", None)
     original_filepath = scene.render.filepath
     original_format = scene.render.image_settings.file_format
 
@@ -202,7 +204,11 @@ def extract_audio_from_strips(
         scene.render.ffmpeg.format = "WAV"
         scene.render.ffmpeg.audio_codec = "PCM"
         scene.render.ffmpeg.audio_bitrate = 128
-        scene.render.ffmpeg.audio_sample_rate = sample_rate
+        # Try both attribute names for sample rate
+        if hasattr(scene.render.ffmpeg, "audio_sample_rate"):
+            scene.render.ffmpeg.audio_sample_rate = sample_rate
+        elif hasattr(scene.render.ffmpeg, "audio_samplerate"):
+            scene.render.ffmpeg.audio_samplerate = sample_rate
 
         # Set frame range to cover all strips
         frame_start = min(int(s.frame_final_start) for s in strips)
