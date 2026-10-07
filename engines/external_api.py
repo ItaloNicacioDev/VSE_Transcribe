@@ -176,3 +176,8 @@ class ExternalAPIEngine(TranscriptionEngine):
                 "raw_response": result,
             },
         )
+
+
+# Auto-register this engine
+from .base import register_engine
+register_engine("external_api", ExternalAPIEngine)
