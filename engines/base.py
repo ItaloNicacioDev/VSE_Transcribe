@@ -10,7 +10,14 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Dict, Optional, Type
 
-from ..models.transcript import Transcript
+try:
+    from ..models.transcript import Transcript
+except ImportError:
+    # Allow running tests directly from engines/ directory
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+    from models.transcript import Transcript
 
 
 @dataclass
