@@ -1,3 +1,8 @@
 models/__pycache__/transcript.cpython-314.pyc
-tests/
+.tests/
 D:\BLENDER_PLUGINS\VSE\VSE_Transcrib\tests
+core/__pycache__/__init__.cpython-314.pyc
+core/__pycache__/subtitle_engine.cpython-314.pyc
+core/__pycache__/transcription.cpython-314.pyc
+tests/test_engines.py
+tests/test_engines.py
