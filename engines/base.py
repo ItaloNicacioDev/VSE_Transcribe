@@ -29,6 +29,59 @@ class EngineNotAvailableError(RuntimeError):
     """Raised when a required engine dependency is not installed."""
 
 
+class TranscriptionError(RuntimeError):
+    """Raised when transcription fails."""
+
+
+class InvalidConfigError(ValueError):
+    """Raised when engine configuration is invalid."""
+
+
+# Registry for engine implementations
+_engine_registry: Dict[str, Type["TranscriptionEngine"]] = {}
+
+
+def register_engine(name: str, cls: Type["TranscriptionEngine"]) -> None:
+    """Register a transcription engine implementation.
+
+    Args:
+        name: Unique engine identifier (e.g., "whisper", "openai").
+        cls: Engine class inheriting from TranscriptionEngine.
+
+    Raises:
+        ValueError: If name is already registered.
+    """
+    if name in _engine_registry:
+        raise ValueError(f"Engine '{name}' already registered")
+    _engine_registry[name] = cls
+
+
+def get_engine(name: str) -> Type["TranscriptionEngine"]:
+    """Get a registered engine class by name.
+
+    Args:
+        name: Engine identifier.
+
+    Returns:
+        The engine class.
+
+    Raises:
+        EngineNotAvailableError: If engine is not registered.
+    """
+    if name not in _engine_registry:
+        raise EngineNotAvailableError(f"Engine '{name}' not registered")
+    return _engine_registry[name]
+
+
+def list_engines() -> Dict[str, Type["TranscriptionEngine"]]:
+    """Return all registered engines.
+
+    Returns:
+        Dict mapping engine names to engine classes.
+    """
+    return dict(_engine_registry)
+
+
 class TranscriptionEngine(ABC):
     """Abstract base class for transcription engines.
 
