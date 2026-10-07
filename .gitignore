@@ -6,3 +6,5 @@ core/__pycache__/subtitle_engine.cpython-314.pyc
 core/__pycache__/transcription.cpython-314.pyc
 tests/test_engines.py
 tests/test_engines.py
+tests/__pycache__/__init__.cpython-314.pyc
+tests/__pycache__/test_engines.cpython-314-pytest-9.1.1.pyc
