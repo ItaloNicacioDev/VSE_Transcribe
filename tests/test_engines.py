@@ -88,8 +88,8 @@ class TestLocalWhisperEngine:
         with pytest.raises(TypeError, match="Expected LocalWhisperConfig"):
             engine.transcribe("/fake/path.wav", config)
 
-    @patch("engines.local_whisper.LocalWhisperEngine._check_dependencies", return_value=True)
-    @patch("engines.local_whisper.LocalWhisperEngine._transcribe_faster_whisper")
+    @patch.object(LocalWhisperEngine, "_check_dependencies", return_value=True)
+    @patch.object(LocalWhisperEngine, "_transcribe_faster_whisper")
     def test_transcribe_calls_faster_whisper_first(self, mock_transcribe, mock_deps):
         """Should try faster-whisper first."""
         engine = LocalWhisperEngine()
@@ -111,7 +111,7 @@ class TestLocalWhisperEngine:
         """Should raise EngineNotAvailableError when no deps."""
         engine = LocalWhisperEngine()
         config = LocalWhisperConfig(model_size="base")
-        from engines.base import EngineNotAvailableError
+        from VSE_Transcrib.engines.base import EngineNotAvailableError
         with pytest.raises(EngineNotAvailableError, match="faster-whisper nor whisper"):
             engine.transcribe("/fake/path.wav", config)
 
@@ -218,7 +218,7 @@ class TestExternalAPIEngine:
         assert result.segments[0].text == "Hello world"
         assert len(result.segments[0].words) == 2
 
-    @patch("engines.external_api.ExternalAPIEngine._check_dependencies", return_value=False)
+    @patch("VSE_Transcrib.engines.external_api.ExternalAPIEngine._check_dependencies", return_value=False)
     def test_transcribe_no_requests_raises(self, mock_deps):
         """Should raise EngineNotAvailableError when requests not installed."""
         engine = ExternalAPIEngine()
@@ -226,7 +226,7 @@ class TestExternalAPIEngine:
             endpoint="https://api.example.com",
             api_key="key",
         )
-        from engines.base import EngineNotAvailableError
+        from VSE_Transcrib.engines.base import EngineNotAvailableError
         with pytest.raises(EngineNotAvailableError, match="requests library"):
             engine.transcribe("/fake/path.wav", config)
 
