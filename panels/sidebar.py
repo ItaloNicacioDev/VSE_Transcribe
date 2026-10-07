@@ -86,11 +86,15 @@ class VSETRANSCRIBE_PT_sidebar(Panel):
         try:
             seq_editor = context.scene.sequence_editor
             if seq_editor:
-                for i, s in enumerate(seq_editor.sequences_all):
+                # Try sequences_all (Blender 5.2+) fallback to sequences
+                strips = getattr(seq_editor, "sequences_all", None)
+                if strips is None:
+                    strips = getattr(seq_editor, "sequences", [])
+                for i, s in enumerate(strips):
                     row = debug_box.row()
                     row.scale_y = 0.7
                     sel_mark = " ✓" if s.select else ""
-                    act_mark = " ★" if seq_editor.active_strip == s else ""
+                    act_mark = " ★" if getattr(seq_editor, "active_strip", None) == s else ""
                     row.label(text=f"{i}: {s.name} | Type: {s.type} | Ch:{s.channel}{sel_mark}{act_mark}")
             else:
                 debug_box.label(text="No sequence editor")
