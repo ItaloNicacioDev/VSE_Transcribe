@@ -138,7 +138,7 @@ def extract_audio_from_strip(
 
         # Unmute all sequences
         if seq_editor:
-            for seq in seq_editor.sequences_all:
+            for seq in _get_sequences(seq_editor):
                 seq.mute = False
 
     return None
@@ -189,7 +189,7 @@ def extract_audio_from_strips(
         return None
 
     # Store original mute states
-    original_mutes = {seq: seq.mute for seq in seq_editor.sequences_all}
+    original_mutes = {seq: seq.mute for seq in _get_sequences(seq_editor)}
 
     try:
         # Configure for WAV export
@@ -213,7 +213,7 @@ def extract_audio_from_strips(
         scene.frame_end = frame_end
 
         # Mute non-target strips
-        for seq in seq_editor.sequences_all:
+        for seq in _get_sequences(seq_editor):
             seq.mute = seq not in strips
 
         # Render audio
