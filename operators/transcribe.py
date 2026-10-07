@@ -41,11 +41,8 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
         """Check if operator can run."""
         if not _HAS_BPY:
             return False
-        settings = context.scene.vse_transcribe
-        # Need either an audio strip selected or audio_source path
-        has_audio_strip = cls._get_active_audio_strip(context) is not None
-        has_audio_source = bool(settings.audio_source and os.path.exists(settings.audio_source))
-        return has_audio_strip or has_audio_source
+        # Need a SOUND or MOVIE strip selected
+        return cls._get_active_audio_strip(context) is not None
 
     def execute(self, context: Context) -> set:
         """Execute transcription."""
@@ -55,20 +52,25 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
 
         settings = context.scene.vse_transcribe
 
-        # Get audio file path
-        audio_path = self._get_audio_path(context, settings)
-        if not audio_path:
-            self.report({"ERROR"}, "No audio source found. Select an audio strip or set audio file path.")
+        # Get audio strip (SOUND or MOVIE)
+        strip = self._get_active_audio_strip(context)
+        if not strip:
+            self.report({"ERROR"}, "No audio strip selected. Select a SOUND or MOVIE strip in the VSE.")
             return {"CANCELLED"}
 
-        if not os.path.exists(audio_path):
-            self.report({"ERROR"}, f"Audio file not found: {audio_path}")
-            return {"CANCELLED"}
+        # Extract audio from strip via render (respects trims, volume, effects)
+        self.report({"INFO"}, "Extracting audio from strip...")
+        from VSE_Transcrib.utils.audio import extract_audio_from_strip
+        audio_path = extract_audio_from_strip(strip, context.scene)
 
-        # Mark as transcribing
-        settings.is_transcribing = True
+        if not audio_path or not os.path.exists(audio_path):
+            self.report({"ERROR"}, "Failed to extract audio from strip")
+            return {"CANCELLED"}
 
         try:
+            # Mark as transcribing
+            settings.is_transcribing = True
+
             # Import engine and config
             from VSE_Transcrib.engines import get_engine
             from VSE_Transcrib.engines.local_whisper import LocalWhisperConfig
@@ -125,10 +127,16 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
             return {"CANCELLED"}
         finally:
             settings.is_transcribing = False
+            # Cleanup temp audio file
+            try:
+                if audio_path and os.path.exists(audio_path):
+                    os.remove(audio_path)
+            except Exception:
+                pass
 
     @staticmethod
     def _get_active_audio_strip(context: Context):
-        """Get the active sound strip in the VSE."""
+        """Get the active sound/movie strip in the VSE."""
         if not _HAS_BPY:
             return None
 
@@ -136,13 +144,14 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
         if not seq_editor:
             return None
 
+        # Check selected strips first (SOUND and MOVIE types have audio)
         for strip in context.selected_sequences:
-            if strip.type == "SOUND":
+            if strip.type in {"SOUND", "MOVIE"}:
                 return strip
 
         # Also check active strip
         active = seq_editor.active_strip
-        if active and active.type == "SOUND":
+        if active and active.type in {"SOUND", "MOVIE"}:
             return active
 
         return None
