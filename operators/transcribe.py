@@ -144,14 +144,18 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
         if not seq_editor:
             return None
 
+        # Try sequences_all (Blender 5.2+) fallback to sequences
+        strips = getattr(seq_editor, "sequences_all", None)
+        if strips is None:
+            strips = getattr(seq_editor, "sequences", [])
+
         # Check selected strips first (SOUND and MOVIE types have audio)
-        # In Blender 5.2+, use strip.select on sequences_all
-        for strip in seq_editor.sequences_all:
+        for strip in strips:
             if strip.select and strip.type in {"SOUND", "MOVIE"}:
                 return strip
 
         # Also check active strip
-        active = seq_editor.active_strip
+        active = getattr(seq_editor, "active_strip", None)
         if active and active.type in {"SOUND", "MOVIE"}:
             return active
 
