@@ -98,16 +98,16 @@ def extract_audio_from_strip(
         scene.render.ffmpeg.audio_samplerate = sample_rate
 
     # Set frame range to strip duration
-            original_frame_start = scene.frame_start
-            original_frame_end = scene.frame_end
-            scene.frame_start = int(strip.frame_final_start)
-            scene.frame_end = int(strip.frame_final_end)
+    original_frame_start = scene.frame_start
+    original_frame_end = scene.frame_end
+    scene.frame_start = int(strip.frame_final_start)
+    scene.frame_end = int(strip.frame_final_end)
 
-            # Mute all other sequences
-            seq_editor = scene.sequence_editor
-            if seq_editor:
-                for seq in _get_sequences(seq_editor):
-                    seq.mute = (seq != strip)
+    # Mute all other sequences
+    seq_editor = scene.sequence_editor
+    if seq_editor:
+        for seq in _get_sequences(seq_editor):
+            seq.mute = (seq != strip)
 
             # Render audio
             try:
