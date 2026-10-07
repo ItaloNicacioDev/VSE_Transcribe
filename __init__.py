@@ -16,6 +16,9 @@ from . import properties
 from . import operators
 from . import panels
 from . import engines
+from . import core
+from . import models
+from . import utils
 
 # Re-export key types for external access
 from .engines.base import (
@@ -26,6 +29,23 @@ from .engines.base import (
     InvalidConfigError,
 )
 from .models.transcript import Transcript, TranscriptSegment, TranscriptWord
+
+# -----------------------------------------------------------------------------
+# bl_info - REQUIRED for Blender addon recognition
+# -----------------------------------------------------------------------------
+
+bl_info = {
+    "name": "VSE_Transcribe",
+    "author": "Italo Nicacio",
+    "description": "AI-powered transcription and subtitle generation for the Blender Video Sequence Editor.",
+    "blender": (5, 2, 0),
+    "version": (0, 1, 0),
+    "location": "Video Sequencer > Sidebar > VSE_Transcribe",
+    "category": "Sequencer",
+    "wiki_url": "https://github.com/ItaloNicacioDev/VSE_Transcribe",
+    "tracker_url": "https://github.com/ItaloNicacioDev/VSE_Transcribe/issues",
+    "support": "COMMUNITY",
+}
 
 __version__ = "0.1.0"
 
