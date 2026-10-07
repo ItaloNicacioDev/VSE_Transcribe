@@ -58,11 +58,22 @@ def register() -> None:
     for cls in CLASSES:
         bpy.utils.register_class(cls)
 
+    # Register menus
+    from . import ui
+    ui.register_menus()
+
     print("[VSE_Transcribe] Addon registered successfully.")
 
 
 def unregister() -> None:
     """Unregister all VSE_Transcribe classes and properties."""
+    # Unregister menus first
+    try:
+        from . import ui
+        ui.unregister_menus()
+    except Exception:
+        pass
+
     # Unregister classes in reverse order
     for cls in reversed(CLASSES):
         try:
