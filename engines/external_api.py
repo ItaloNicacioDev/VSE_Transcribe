@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 import requests
 
 from .base import EngineConfig, EngineNotAvailableError, TranscriptionEngine
-from ..models.transcript import Transcript, TranscriptSegment, TranscriptWord
+from VSE_Transcrib.models.transcript import Transcript, TranscriptSegment, TranscriptWord
 
 
 @dataclass
