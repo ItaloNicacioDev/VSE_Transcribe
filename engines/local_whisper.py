@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from .base import EngineConfig, EngineNotAvailableError, TranscriptionEngine
-from ..models.transcript import Transcript, TranscriptSegment, TranscriptWord
+from VSE_Transcrib.models.transcript import Transcript, TranscriptSegment, TranscriptWord
 
 
 # Valid configuration values
