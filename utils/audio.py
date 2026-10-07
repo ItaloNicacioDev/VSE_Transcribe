@@ -21,28 +21,15 @@ except ImportError:
     _HAS_BPY = False
 
 
-def get_audio_path_from_strip(strip: "Sequence", scene: "Scene") -> str | None:
-    """Get the absolute file path for a sound strip.
-
-    Args:
-        strip: A VSE sequence strip of type 'SOUND'.
-        scene: The Blender scene.
-
-    Returns:
-        Absolute path to the audio file, or None if not found.
+def _get_sequences(seq_editor):
+    """Get sequences list with Blender version compatibility.
+    
+    Blender 5.2+ uses sequences_all, older versions use sequences.
     """
-    if not _HAS_BPY:
-        return None
-
-    if strip.type != "SOUND" or not strip.sound:
-        return None
-
-    # Resolve relative path
-    filepath = bpy.path.abspath(strip.sound.filepath)
-    if os.path.exists(filepath):
-        return filepath
-
-    return None
+    if seq_editor is None:
+        return []
+    # Blender 5.2+ uses sequences_all, older versions use sequences
+    return getattr(seq_editor, "sequences_all", None) or getattr(seq_editor, "sequences", [])
 
 
 def extract_audio_from_strip(
@@ -95,7 +82,7 @@ def extract_audio_from_strip(
     # Mute all other sequences
     seq_editor = scene.sequence_editor
     if seq_editor:
-        for seq in seq_editor.sequences_all:
+        for seq in _get_sequences(seq_editor):
             seq.mute = (seq != strip)
 
     # Configure for WAV export
@@ -111,19 +98,19 @@ def extract_audio_from_strip(
         scene.render.ffmpeg.audio_samplerate = sample_rate
 
     # Set frame range to strip duration
-    original_frame_start = scene.frame_start
-    original_frame_end = scene.frame_end
-    scene.frame_start = int(strip.frame_final_start)
-    scene.frame_end = int(strip.frame_final_end)
+            original_frame_start = scene.frame_start
+            original_frame_end = scene.frame_end
+            scene.frame_start = int(strip.frame_final_start)
+            scene.frame_end = int(strip.frame_final_end)
 
-    # Mute all other sequences
-    seq_editor = scene.sequence_editor
-    if seq_editor:
-        for seq in seq_editor.sequences_all:
-            seq.mute = (seq != strip)
+            # Mute all other sequences
+            seq_editor = scene.sequence_editor
+            if seq_editor:
+                for seq in _get_sequences(seq_editor):
+                    seq.mute = (seq != strip)
 
-    # Render audio
-    try:
+            # Render audio
+            try:
         bpy.ops.render.render(animation=True, write_still=False)
 
         # Verify output
