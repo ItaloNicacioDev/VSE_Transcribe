@@ -1,13 +1,11 @@
 """VSE_Transcribe - Blender VSE Transcription Addon."""
 
-from .engines import (
+from .engines.base import (
     EngineConfig,
     EngineNotAvailableError,
     TranscriptionEngine,
-    LocalWhisperConfig,
-    LocalWhisperEngine,
-    ExternalAPIConfig,
-    ExternalAPIEngine,
+    TranscriptionError,
+    InvalidConfigError,
 )
 from .models.transcript import Transcript, TranscriptSegment, TranscriptWord
 
