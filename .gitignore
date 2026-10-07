@@ -8,3 +8,15 @@ tests/test_engines.py
 tests/test_engines.py
 tests/__pycache__/__init__.cpython-314.pyc
 tests/__pycache__/test_engines.cpython-314-pytest-9.1.1.pyc
+__pycache__/__init__.cpython-314.pyc
+engines/__pycache__/__init__.cpython-314.pyc
+engines/__pycache__/base.cpython-314.pyc
+engines/__pycache__/external_api.cpython-314.pyc
+engines/__pycache__/local_whisper.cpython-314.pyc
+models/__pycache__/__init__.cpython-314.pyc
+operators/__pycache__/__init__.cpython-314.pyc
+operators/__pycache__/clear_subtitles.cpython-314.pyc
+operators/__pycache__/export_subtitles.cpython-314.pyc
+operators/__pycache__/generate_subtitles.cpython-314.pyc
+operators/__pycache__/transcribe.cpython-314.pyc
+properties/__pycache__/settings.cpython-314.pyc
