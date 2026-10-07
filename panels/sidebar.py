@@ -250,19 +250,23 @@ class VSETRANSCRIBE_PT_sidebar(Panel):
             if not seq_editor:
                 return None
 
+            # Try sequences_all (Blender 5.2+) fallback to sequences
+            strips = getattr(seq_editor, "sequences_all", None)
+            if strips is None:
+                strips = getattr(seq_editor, "sequences", [])
+
             # Strategy 1: Check selected strips (Blender 5.2+)
-            for strip in seq_editor.sequences_all:
+            for strip in strips:
                 if strip.select and strip.type in {"SOUND", "MOVIE"}:
                     return strip
 
             # Strategy 2: Check active strip
-            active = seq_editor.active_strip
+            active = getattr(seq_editor, "active_strip", None)
             if active and active.type in {"SOUND", "MOVIE"}:
                 return active
 
             # Strategy 3: Fallback - any SOUND/MOVIE strip in the timeline
-            # (user may have clicked away but video is still there)
-            for strip in seq_editor.sequences_all:
+            for strip in strips:
                 if strip.type in {"SOUND", "MOVIE"}:
                     return strip
 
