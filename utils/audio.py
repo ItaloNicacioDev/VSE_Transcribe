@@ -109,8 +109,8 @@ def extract_audio_from_strip(
         for seq in _get_sequences(seq_editor):
             seq.mute = (seq != strip)
 
-            # Render audio
-            try:
+    # Render audio
+    try:
         bpy.ops.render.render(animation=True, write_still=False)
 
         # Verify output
@@ -183,6 +183,8 @@ def extract_audio_from_strips(
         original_audio_samplerate = getattr(scene.render.ffmpeg, "audio_samplerate", None)
     original_filepath = scene.render.filepath
     original_format = scene.render.image_settings.file_format
+    original_frame_start = scene.frame_start
+    original_frame_end = scene.frame_end
 
     seq_editor = scene.sequence_editor
     if not seq_editor:
