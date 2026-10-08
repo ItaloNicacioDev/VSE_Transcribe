@@ -100,6 +100,7 @@ def register_menus() -> None:
         "SEQUENCE_MT_editor_menus",
         "SEQUENCE_MT_menu",
         "SEQUENCE_MT_view",
+        "SEQUENCE_MT_header",
     ]
 
     for menu_name in menu_targets:
@@ -135,6 +136,7 @@ def unregister_menus() -> None:
         "SEQUENCE_MT_editor_menus",
         "SEQUENCE_MT_menu",
         "SEQUENCE_MT_view",
+        "SEQUENCE_MT_header",
     ]
 
     for menu_name in menu_targets:
