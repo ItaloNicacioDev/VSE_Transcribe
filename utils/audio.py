@@ -182,12 +182,12 @@ def _mixdown_audio(
             original_frame_end = scene.frame_end
             scene.frame_start = frame_start
             scene.frame_end = frame_end
-            
+
             # Ensure output directory exists
-                            os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-            
-                        # Use sound.mixdown - much faster than render.render
-                        # Note: Don't pass container/codec to mixdown - let it use scene render settings
+            os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+
+            # Use sound.mixdown - much faster than render.render
+            # Note: Don't pass container/codec to mixdown - let it use scene render settings
                         try:
                             bpy.ops.sound.mixdown(
                                 filepath=output_path,
