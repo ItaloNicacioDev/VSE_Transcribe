@@ -6,6 +6,8 @@ Provides consistent logging across the addon with Blender integration.
 from __future__ import annotations
 
 import logging
+import logging.handlers
+import os
 import sys
 from typing import TYPE_CHECKING
 
@@ -33,13 +35,37 @@ def get_logger(name: str = "VSE_Transcribe") -> logging.Logger:
 
         # Avoid duplicate handlers
         if not _logger.handlers:
-            handler = logging.StreamHandler(sys.stdout)
-            handler.setLevel(logging.DEBUG)
-            formatter = logging.Formatter(
+            # Console handler
+            console_handler = logging.StreamHandler(sys.stdout)
+            console_handler.setLevel(logging.DEBUG)
+            console_formatter = logging.Formatter(
                 "[%(name)s] %(levelname)s: %(message)s"
             )
-            handler.setFormatter(formatter)
-            _logger.addHandler(handler)
+            console_handler.setFormatter(console_formatter)
+            _logger.addHandler(console_handler)
+
+            # File handler with rotation
+            try:
+                log_dir = os.path.join(os.path.expanduser("~"), "VSE_Transcribe_logs")
+                os.makedirs(log_dir, exist_ok=True)
+                log_file = os.path.join(log_dir, "vse_transcribe.log")
+                
+                file_handler = logging.handlers.RotatingFileHandler(
+                    log_file,
+                    maxBytes=5 * 1024 * 1024,  # 5 MB
+                    backupCount=3,
+                    encoding="utf-8"
+                )
+                file_handler.setLevel(logging.DEBUG)
+                file_formatter = logging.Formatter(
+                    "%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+                    datefmt="%Y-%m-%d %H:%M:%S"
+                )
+                file_handler.setFormatter(file_formatter)
+                _logger.addHandler(file_handler)
+            except Exception:
+                # If file logging fails, continue with console only
+                pass
 
     return _logger
 
