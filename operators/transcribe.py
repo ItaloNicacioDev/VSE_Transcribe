@@ -99,6 +99,7 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
                 "status": "started",
                 "audio_path": audio_path,
                 "settings": settings,
+                "context": context,
                 "result": None,
                 "error": None,
             }
@@ -124,7 +125,7 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
                 result = _transcription_results[job_id]
                 if result["status"] == "finished":
                     # Process result
-                    self._process_transcription_result(result, settings)
+                    self._process_transcription_result(result, settings, context)
                     del _transcription_results[job_id]
                     settings.is_transcribing = False
                     return None  # Stop timer
@@ -209,7 +210,7 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
             except Exception:
                 pass
 
-    def _process_transcription_result(self, result, settings):
+    def _process_transcription_result(self, result, settings, context):
         """Process completed transcription result on main thread."""
         transcript = result["result"]
         if transcript:
@@ -234,7 +235,7 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
                 
                 if blocks:
                     # Get or create sequence editor
-                    scene = result["context"].scene
+                    scene = context.scene
                     if not scene.sequence_editor:
                         scene.sequence_editor_create()
                     
