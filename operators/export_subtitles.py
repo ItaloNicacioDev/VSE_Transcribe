@@ -71,9 +71,12 @@ class VSETRANSCRIBE_OT_export_subtitles(Operator):
 
         settings = context.scene.vse_transcribe
 
-        # Deserialize transcript
+        # Deserialize transcript with error handling
         try:
             transcript = self._json_to_transcript(settings.transcript_storage)
+        except json.JSONDecodeError as e:
+            self.report({"ERROR"}, f"Invalid transcript JSON: {e}")
+            return {"CANCELLED"}
         except Exception as e:
             self.report({"ERROR"}, f"Failed to parse transcript: {e}")
             return {"CANCELLED"}
@@ -99,7 +102,7 @@ class VSETRANSCRIBE_OT_export_subtitles(Operator):
             elif self.format == "VTT":
                 content = self._export_vtt(transcript)
             elif self.format == "ASS":
-                content = self._export_ass(transcript)
+                content = self._export_ass(transcript, settings.subtitle)
             else:
                 self.report({"ERROR"}, f"Unknown format: {self.format}")
                 return {"CANCELLED"}
@@ -187,9 +190,15 @@ class VSETRANSCRIBE_OT_export_subtitles(Operator):
             lines.append("")
         return "\n".join(lines)
 
-    def _export_ass(self, transcript: "Transcript") -> str:
-        """Export to ASS format."""
-        # ASS header
+    def _export_ass(self, transcript: "Transcript", subtitle_settings) -> str:
+        """Export to ASS format using subtitle settings."""
+        # ASS header with configurable style
+        font_name = "Arial"
+        font_size = 20
+        primary_color = "&H00FFFFFF"
+        outline_color = "&H00000000"
+        back_color = "&H00000000"
+        
         header = [
             "[Script Info]",
             "Title: VSE_Transcribe Export",
@@ -200,7 +209,7 @@ class VSETRANSCRIBE_OT_export_subtitles(Operator):
             "",
             "[V4+ Styles]",
             "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-            "Style: Default,Arial,20,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1",
+            f"Style: Default,{font_name},{font_size},{primary_color},&H000000FF,{outline_color},{back_color},0,0,0,0,100,100,0,0,1,2,2,2,10,10,10,1",
             "",
             "[Events]",
             "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
