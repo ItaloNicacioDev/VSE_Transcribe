@@ -38,15 +38,29 @@ def _mixdown_audio(
     output_path: str,
     sample_rate: int,
     strips: list["Sequence"],
-) -> bool:
+) -> tuple[bool, str]:
     """Extract audio using Blender's sound.mixdown (much faster than render).
     
-    Returns True on success, False on failure.
+    Returns (success: bool, error_message: str)
     """
     try:
+        # Validate strips have audio
+        audio_strips = [s for s in strips if s.type in {"SOUND", "MOVIE"}]
+        if not audio_strips:
+            return False, "No audio strips found (need SOUND or MOVIE type)"
+        
+        # Check if strips have audio data
+        for s in audio_strips:
+            if s.type == "MOVIE":
+                # Check if movie strip has audio - we'll try anyway
+                pass
+        
         # Determine frame range
         frame_start = min(int(s.frame_final_start) for s in strips)
         frame_end = max(int(s.frame_final_end) for s in strips)
+        
+        if frame_start >= frame_end:
+            return False, f"Invalid frame range: {frame_start} >= {frame_end}"
         
         # Mute non-target strips
         original_mutes = {}
@@ -84,20 +98,32 @@ def _mixdown_audio(
             scene.frame_start = frame_start
             scene.frame_end = frame_end
             
-            # Use sound.mixdown - much faster than render.render
-            # container='MKV', codec='PCM', sample_rate, channels=1 (mono)
-            bpy.ops.sound.mixdown(
-                filepath=output_path,
-                container='MKV',
-                codec='PCM',
-                sample_rate=sample_rate,
-                channels=1,  # mono
-                mix_buffer_size=1024,
-                start_frame=frame_start,
-                end_frame=frame_end,
-            )
+            # Ensure output directory exists
+            os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
             
-            return os.path.exists(output_path) and os.path.getsize(output_path) > 0
+            # Use sound.mixdown - much faster than render.render
+            try:
+                bpy.ops.sound.mixdown(
+                    filepath=output_path,
+                    container='MKV',
+                    codec='PCM',
+                    sample_rate=sample_rate,
+                    channels=1,  # mono
+                    mix_buffer_size=1024,
+                    start_frame=frame_start,
+                    end_frame=frame_end,
+                )
+            except Exception as e:
+                return False, f"sound.mixdown failed: {e}"
+            
+            # Verify output
+            if not os.path.exists(output_path):
+                return False, "Output file was not created"
+            
+            if os.path.getsize(output_path) == 0:
+                return False, "Output file is empty (0 bytes)"
+            
+            return True, "Success"
             
         finally:
             # Restore strip mute states
@@ -105,10 +131,10 @@ def _mixdown_audio(
                 if seq:
                     seq.mute = mute
                     
-    except Exception:
-        return False
+    except Exception as e:
+        return False, f"Unexpected error in _mixdown_audio: {e}"
     
-    return False
+    return False, "Unknown error"
 
 
 def extract_audio_from_strip(
@@ -159,10 +185,15 @@ def extract_audio_from_strip(
 
     try:
         # Use sound.mixdown for fast audio extraction
-        success = _mixdown_audio(scene, seq_editor, output_path, sample_rate, [strip])
+        success, error = _mixdown_audio(scene, scene.sequence_editor, output_path, sample_rate, [strip])
         
         if success and os.path.exists(output_path) and os.path.getsize(output_path) > 0:
             return output_path
+        
+        # Log the error for debugging
+        if error:
+            print(f"[VSE_Transcribe] Audio extraction failed: {error}")
+        
         return None
         
     finally:
@@ -218,10 +249,14 @@ def extract_audio_from_strips(
 
     try:
         # Use sound.mixdown for fast audio extraction
-        success = _mixdown_audio(scene, scene.sequence_editor, output_path, sample_rate, strips)
+        success, error = _mixdown_audio(scene, scene.sequence_editor, output_path, sample_rate, strips)
         
         if success and os.path.exists(output_path) and os.path.getsize(output_path) > 0:
             return output_path
+        
+        if error:
+            print(f"[VSE_Transcribe] Audio extraction failed: {error}")
+        
         return None
         
     finally:
