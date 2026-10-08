@@ -35,52 +35,14 @@ class VSETRANSCRIBE_PT_sidebar(Panel):
     def poll(cls, context: Context) -> bool:
         """Show panel in 3D Viewport when VSE Transcribe addon is enabled."""
         try:
-            return _HAS_BPY and context.scene and context.scene.sequence_editor is not None
+            return _HAS_BPY and context.scene is not None
         except Exception:
             return False
 
     def draw(self, context: Context) -> None:
-        """Draw the panel UI - with full error handling."""
+        """Draw the panel UI."""
         if not _HAS_BPY:
             return
-
-        layout = self.layout
-        
-        # Always show something - defensive coding
-        try:
-            self._draw_content(context)
-        except Exception as e:
-            # If anything fails, show error in panel
-            box = layout.box()
-            box.alert = True
-            box.label(text="VSE_Transcribe Error", icon="ERROR")
-            box.label(text=str(e)[:100])
-            import traceback
-            for line in traceback.format_exc().split('\n')[:5]:
-                if line.strip():
-                    box.label(text=line[:100])
-
-    def _draw_content(self, context: Context) -> None:
-        """Main draw logic with proper error handling."""
-        """Draw the panel UI - with full error handling."""
-        if not _HAS_BPY:
-            return
-
-        layout = self.layout
-
-        # Always show something - defensive coding
-        try:
-            self._draw_content_new(context)
-        except Exception as e:
-            # If anything fails, show error in panel
-            box = layout.box()
-            box.alert = True
-            box.label(text="VSE_Transcribe Error", icon="ERROR")
-            box.label(text=str(e)[:100])
-            import traceback
-            for line in traceback.format_exc().split('\n')[:5]:
-                if line.strip():
-                    box.label(text=line[:100])
 
         layout = self.layout
         
@@ -91,69 +53,57 @@ class VSETRANSCRIBE_PT_sidebar(Panel):
             layout.box().label(text="Settings not loaded. Reinstall addon.", icon="ERROR")
             return
 
-        # --- STRIP SELECTION ---
-        strip = self._get_active_strip(context)
-
+        # --- SOURCE SELECTION ---
         box = layout.box()
-        box.label(text="Source Strip", icon="SEQ_SEQUENCER")
-
-        # DEBUG: Show all strips found in timeline (only in advanced mode)
-        if settings.show_advanced:
-            debug_box = box.box()
-            debug_box.label(text="Debug: All Strips in Timeline", icon="INFO")
-            try:
-                seq_editor = context.scene.sequence_editor
-                if seq_editor:
-                    # Try sequences_all (Blender 5.2+) fallback to sequences
-                    strips = getattr(seq_editor, "sequences_all", None)
-                    if strips is None:
-                        strips = getattr(seq_editor, "sequences", [])
-                    for i, s in enumerate(strips):
-                        row = debug_box.row()
-                        row.scale_y = 0.7
-                        is_selected = getattr(s, "select_get", lambda: s.select)()
-                        sel_mark = " ✓" if is_selected else ""
-                        act_mark = " ★" if getattr(seq_editor, "active_strip", None) == s else ""
-                        row.label(text=f"{i}: {s.name} | Type: {s.type} | Ch:{s.channel}{sel_mark}{act_mark}")
-                else:
-                    debug_box.label(text="No sequence editor")
-            except Exception as e:
-                debug_box.label(text=f"Debug error: {e}")
-
-        if strip:
-            # Show strip info prominently
-            row = box.row()
-            row.label(text=f"{strip.name}", icon="FILE_MOVIE" if strip.type == "MOVIE" else "SPEAKER")
-            row = box.row()
-            row.label(text=f"Type: {strip.type}  |  Channel: {strip.channel}  |  Frames: {strip.frame_final_duration}")
-            
-            # Show strip timing
-            try:
-                scene = context.scene
-                fps = scene.render.fps / scene.render.fps_base
-                start_sec = strip.frame_final_start / fps
-                end_sec = strip.frame_final_end / fps
+        box.label(text="Source", icon="SEQ_SEQUENCER")
+        
+        row = box.row(align=True)
+        row.prop(settings, "use_vse_strip", toggle=True, text="Use VSE Strip")
+        
+        if settings.use_vse_strip:
+            strip = self._get_active_strip(context)
+            if strip:
                 row = box.row()
-                row.label(text=f"Time: {self._format_time(start_sec)} → {self._format_time(end_sec)}  ({strip.frame_final_duration/fps:.1f}s)")
-            except Exception:
-                pass
+                row.label(text=f"{strip.name}", icon="FILE_MOVIE" if strip.type == "MOVIE" else "SPEAKER")
+                row = box.row()
+                row.label(text=f"Type: {strip.type}  |  Channel: {strip.channel}  |  Frames: {strip.frame_final_duration}")
+                try:
+                    scene = context.scene
+                    fps = scene.render.fps / scene.render.fps_base
+                    start_sec = strip.frame_final_start / fps
+                    end_sec = strip.frame_final_end / fps
+                    row = box.row()
+                    row.label(text=f"Time: {self._format_time(start_sec)} → {self._format_time(end_sec)}  ({strip.frame_final_duration/fps:.1f}s)")
+                except Exception:
+                    pass
+            else:
+                row = box.row()
+                row.alert = True
+                row.label(text="No strip selected", icon="ERROR")
+                row = box.row()
+                row.label(text="Select a SOUND or MOVIE strip in the VSE")
         else:
             row = box.row()
-            row.alert = True
-            row.label(text="No strip selected", icon="ERROR")
+            row.prop(settings, "audio_source", text="Audio File")
             row = box.row()
-            row.label(text="Select a SOUND or MOVIE strip in the VSE")
-
-        # Only show rest if strip is selected
-        if not strip:
-            return
+            row.operator("vse_transcribe.browse_audio", text="", icon="FILE_FOLDER")
+            if settings.audio_source:
+                row = box.row()
+                row.label(text=os.path.basename(settings.audio_source), icon="FILE_SOUND")
+                try:
+                    # Try to get duration? We'll skip for now.
+                    pass
+                except Exception:
+                    pass
+            else:
+                row = box.row()
+                row.label(text="No file selected", icon="BLANK1")
 
         layout.separator()
 
         # --- ENGINE SELECTION (compact) ---
         box = layout.box()
-        row = box.row()
-        row.label(text="Engine: Local Whisper", icon="FILE_TICK")
+        box.label(text="Engine: Local Whisper", icon="FILE_TICK")
         self._draw_local_whisper_settings(box, settings)
 
         layout.separator()
@@ -161,7 +111,7 @@ class VSETRANSCRIBE_PT_sidebar(Panel):
         # --- LANGUAGE SELECTION (prominent) ---
         box = layout.box()
         box.label(text="Language", icon="LINENUMBERS_ON")
-
+        
         row = box.row()
         # Auto-detect option
         row.prop(settings.local_whisper, "language", text="")
@@ -173,21 +123,33 @@ class VSETRANSCRIBE_PT_sidebar(Panel):
 
         layout.separator()
 
-        # --- TRANSCRIBE BUTTON (prominent) ---
-        box = layout.box()
-        row = box.row()
-        row.scale_y = 1.5
-        op = row.operator("vse_transcribe.transcribe", text="Transcribe", icon="FILE_TICK")
-        try:
-            op.enabled = not settings.is_transcribing
-        except Exception:
-            pass
+        # --- CONTROLS ---
+        col = layout.column(align=True)
+        col.scale_y = 1.5
+        
+        row = col.row(align=True)
+        row.scale_x = 2.0
+        row.operator("vse_transcribe.transcribe", text="Transcribe", icon="FILE_TICK")
+        
+        row = col.row(align=True)
+        row.scale_x = 2.0
+        row.operator("vse_transcribe.cancel_transcription", text="Cancel", icon="CANCEL")
+        
+        row = col.row(align=True)
+        row.scale_x = 2.0
+        row.operator("vse_transcribe.generate_subtitles", text="Create Subtitle Strips", icon="PLUS")
+        
+        row = col.row(align=True)
+        row.scale_x = 2.0
+        row.operator("vse_transcribe.export_subtitles", text="Export", icon="EXPORT")
+        
+        row = col.row(align=True)
+        row.scale_x = 2.0
+        row.operator("vse_transcribe.clear_subtitles", text="Clear", icon="TRASH")
 
-        if settings.is_transcribing:
-            row = box.row()
-            row.label(text="Transcribing...", icon="TIME")
+        layout.separator()
 
-        # Show transcript status if available
+        # --- TRANSCRIPT STATUS ---
         if settings.transcript_storage:
             try:
                 import json
@@ -195,53 +157,86 @@ class VSETRANSCRIBE_PT_sidebar(Panel):
                 seg_count = len(data.get("segments", []))
                 lang = data.get("language", "?")
                 dur = data.get("duration", 0)
-
-                layout.separator()
+                
                 box = layout.box()
                 box.label(text="Transcript Ready", icon="CHECKMARK")
                 row = box.row()
                 row.label(text=f"{seg_count} segments  •  {lang}  •  {dur:.1f}s")
-
-                # Auto-generate subtitles button
-                row = box.row()
-                row.scale_y = 1.2
-                op = row.operator("vse_transcribe.generate_subtitles", text="Create Subtitle Strips", icon="PLUS")
-
+                
                 # Show subtitle settings compact
                 layout.separator()
                 self._draw_subtitle_settings_compact(layout, settings)
             except Exception:
                 pass
 
-        # Show transcription progress if active
+        layout.separator()
+
+        # --- TRANSCRIPTION PROGRESS ---
         if settings.is_transcribing:
-            try:
-                layout.separator()
-                box = layout.box()
-                box.label(text="Transcribing...", icon="TIME")
-                # Progress bar
+            box = layout.box()
+            box.label(text="Transcribing...", icon="TIME")
+            # Progress bar
+            row = box.row()
+            row.prop(settings, "transcription_progress", text="")
+            row = box.row()
+            row.label(text=f"Progress: {settings.transcription_progress*100:.1f}%")
+            # Current word
+            if settings.last_word:
                 row = box.row()
-                row.prop(settings, "transcription_progress", text="")
+                row.label(text=f"Current word: {settings.last_word}", icon="SOUND")
+            # Elapsed time
+            if settings.transcription_elapsed > 0:
+                mins = int(settings.transcription_elapsed // 60)
+                secs = int(settings.transcription_elapsed % 60)
                 row = box.row()
-                row.label(text=f"Progress: {settings.transcription_progress*100:.1f}%")
-                # Current word
-                if settings.last_word:
-                    row = box.row()
-                    row.label(text=f"Current word: {settings.last_word}", icon="SOUND")
-                # Elapsed time
-                if settings.transcription_elapsed > 0:
-                    mins = int(settings.transcription_elapsed // 60)
-                    secs = int(settings.transcription_elapsed % 60)
-                    row = box.row()
-                    row.label(text=f"Elapsed: {mins:02d}:{secs:02d}")
-                # Animated icon (simple spinner)
-                icons = ['TIME', 'FILE_REFRESH', 'FILE_TICK', 'FILE_CHECK', 'FILE_NEW', 'FILE_FOLDER', 'FILE_BLEND', 'FILE_SCRIPT']
-                icon_idx = settings.transcription_icon_index % len(icons)
-                row = box.row()
-                row.label(text="", icon=icons[icon_idx])
-            except Exception as e:
-                # Silently ignore UI errors during transcription to avoid crashing
-                pass
+                row.label(text=f"Elapsed: {mins:02d}:{secs:02d}")
+            # Animated icon (simple spinner)
+            icons = ['TIME', 'FILE_REFRESH', 'FILE_TICK', 'FILE_CHECK', 'FILE_NEW', 'FILE_FOLDER', 'FILE_BLEND', 'FILE_SCRIPT']
+            icon_idx = settings.transcription_icon_index % len(icons)
+            row = box.row()
+            row.label(text="", icon=icons[icon_idx])
+
+    def _get_active_strip(self, context: Context):
+        """Get the active sound/movie strip in the VSE."""
+        if not _HAS_BPY:
+            return None
+        
+        try:
+            seq_editor = context.scene.sequence_editor
+            if not seq_editor:
+                return None
+        except Exception:
+            return None
+        
+        # Try sequences_all (Blender 5.2+) fallback to sequences
+        strips = getattr(seq_editor, "sequences_all", None)
+        if strips is None:
+            strips = getattr(seq_editor, "sequences", [])
+        
+        # Strategy 1: Check selected strips (Blender 5.2+ uses select_get())
+        for strip in strips:
+            is_selected = getattr(strip, "select_get", lambda: strip.select)()
+            if is_selected and strip.type in {"SOUND", "MOVIE"}:
+                return strip
+        
+        # Strategy 2: Check active strip
+        active = getattr(seq_editor, "active_strip", None)
+        if active and active.type in {"SOUND", "MOVIE"}:
+            return active
+        
+        # Strategy 3: Fallback - any SOUND/MOVIE strip in the timeline
+        for strip in strips:
+            if strip.type in {"SOUND", "MOVIE"}:
+                return strip
+        
+        return None
+        
+    def _format_time(self, seconds: float) -> str:
+        """Format seconds as MM:SS.mmm"""
+        minutes = int(seconds // 60)
+        secs = int(seconds % 60)
+        millis = int((seconds - int(seconds)) * 1000)
+        return f"{minutes:02d}:{secs:02d}.{millis:03d}"
 
     def _draw_local_whisper_settings(self, box, settings):
         row = box.row()
@@ -254,6 +249,7 @@ class VSETRANSCRIBE_PT_sidebar(Panel):
         row.prop(settings.local_whisper, "word_timestamps")
         row = box.row()
         row.prop(settings.local_whisper, "model_dir")
+
     def _draw_subtitle_settings_compact(self, layout, settings):
         """Draw compact subtitle settings."""
         box = layout.box()
@@ -261,53 +257,12 @@ class VSETRANSCRIBE_PT_sidebar(Panel):
         sub = settings.subtitle
         row = box.row(align=True)
         row.prop(sub, "max_chars_per_line", text="Max Chars")
+        row = box.row(align=True)
         row.prop(sub, "max_lines", text="Lines")
         row = box.row(align=True)
         row.prop(sub, "min_duration", text="Min Dur")
+        row = box.row(align=True)
         row.prop(sub, "gap_threshold", text="Gap")
-
-    def _get_active_strip(self, context: Context):
-        """Get the active sound/movie strip in the VSE."""
-        if not _HAS_BPY:
-            return None
-
-        try:
-            seq_editor = context.scene.sequence_editor
-            if not seq_editor:
-                return None
-
-            # Try sequences_all (Blender 5.2+) fallback to sequences
-            strips = getattr(seq_editor, "sequences_all", None)
-            if strips is None:
-                strips = getattr(seq_editor, "sequences", [])
-
-            # Strategy 1: Check selected strips (Blender 5.2+ uses select_get())
-            for strip in strips:
-                is_selected = getattr(strip, "select_get", lambda: strip.select)()
-                if is_selected and strip.type in {"SOUND", "MOVIE"}:
-                    return strip
-
-            # Strategy 2: Check active strip
-            active = getattr(seq_editor, "active_strip", None)
-            if active and active.type in {"SOUND", "MOVIE"}:
-                return active
-
-            # Strategy 3: Fallback - any SOUND/MOVIE strip in the timeline
-            for strip in strips:
-                if strip.type in {"SOUND", "MOVIE"}:
-                    return strip
-
-        except Exception:
-            pass
-
-        return None
-
-    def _format_time(self, seconds: float) -> str:
-        """Format seconds as MM:SS.mmm"""
-        minutes = int(seconds // 60)
-        secs = int(seconds % 60)
-        millis = int((seconds - int(seconds)) * 1000)
-        return f"{minutes:02d}:{secs:02d}.{millis:03d}"
 
 
 # Registration handled by __init__.py
