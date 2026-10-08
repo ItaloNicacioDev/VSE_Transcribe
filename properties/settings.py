@@ -243,7 +243,6 @@ def register_properties():
     if not _HAS_BPY:
         return
     bpy.utils.register_class(LocalWhisperProps)
-    bpy.utils.register_class(ExternalAPIProps)
     bpy.utils.register_class(SubtitleProps)
     bpy.utils.register_class(GeneratedStripName)
     bpy.utils.register_class(VSETranscribeSettings)
@@ -261,5 +260,4 @@ def unregister_properties():
     bpy.utils.unregister_class(VSETranscribeSettings)
     bpy.utils.unregister_class(GeneratedStripName)
     bpy.utils.unregister_class(SubtitleProps)
-    bpy.utils.unregister_class(ExternalAPIProps)
     bpy.utils.unregister_class(LocalWhisperProps)
