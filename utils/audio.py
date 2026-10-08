@@ -70,7 +70,45 @@ def _get_ffmpeg_container_codec():
     """
     # Both old and new Blender versions use 'MKV' for Matroska container
     # 'MATROSKA' was never a valid enum value in bpy
+    # Try to detect if MKV is available, fallback to MPEG4
     return "MKV", "PCM"
+
+
+def _test_ffmpeg_format(scene, container: str) -> bool:
+    """Test if a container format is valid in current Blender version."""
+    try:
+        original = scene.render.ffmpeg.format
+        scene.render.ffmpeg.format = container
+        scene.render.ffmpeg.format = original
+        return True
+    except Exception:
+        return False
+
+
+def _get_available_ffmpeg_format(scene) -> str:
+    """Get an available FFmpeg container format."""
+    # Test formats in order of preference
+    for fmt in ("MKV", "MPEG4", "AVI", "QUICKTIME", "WEBM"):
+        if _test_ffmpeg_format(scene, fmt):
+            return fmt
+    return "MKV"  # Default fallback
+
+
+def _get_available_audio_codec(scene, container: str) -> str:
+    """Get an available audio codec for the given container."""
+    # Test codecs in order of preference for lossless PCM
+    for codec in ("PCM", "AAC", "MP3", "VORBIS", "FLAC"):
+        try:
+            original_format = scene.render.ffmpeg.format
+            original_codec = scene.render.ffmpeg.audio_codec
+            scene.render.ffmpeg.format = container
+            scene.render.ffmpeg.audio_codec = codec
+            scene.render.ffmpeg.format = original_format
+            scene.render.ffmpeg.audio_codec = original_codec
+            return codec
+        except Exception:
+            continue
+    return "PCM"  # Default fallback
 
 
 def _mixdown_audio(
@@ -110,8 +148,11 @@ def _mixdown_audio(
             seq.mute = seq not in strips
         
         try:
-            # Get correct container/codec for this Blender version
-            container, audio_codec = _get_ffmpeg_container_codec()
+            # Get available container/codec for this Blender version
+            container = _get_available_ffmpeg_format(scene)
+            audio_codec = _get_available_audio_codec(scene, container)
+            
+            print(f"[VSE_Transcribe] Using container={container}, audio_codec={audio_codec}")
             
             # Configure render settings for audio mixdown
             original_filepath = scene.render.filepath
@@ -173,7 +214,7 @@ def _mixdown_audio(
             for seq, mute in original_mutes.items():
                 if seq:
                     seq.mute = mute
-                    
+                   
     except Exception as e:
         return False, f"Unexpected error in _mixdown_audio: {e}"
     
