@@ -374,32 +374,15 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
 
     def _build_engine_config(self, settings):
         """Build engine config from settings."""
-        if settings.engine_type == "local_whisper":
-            from VSE_Transcrib.engines.local_whisper import LocalWhisperConfig
-            lw = settings.local_whisper
-            return LocalWhisperConfig(
-                language=lw.language or None,
-                model_size=lw.model_size,
-                device=lw.device,
-                compute_type=lw.compute_type,
-                word_timestamps=lw.word_timestamps,
-            )
-        elif settings.engine_type == "external_api":
-            from VSE_Transcrib.engines.external_api import ExternalAPIConfig
-            ea = settings.external_api
-            if not ea.endpoint or not ea.api_key:
-                self.report({"ERROR"}, "External API requires endpoint and API key")
-                return None
-            return ExternalAPIConfig(
-                language=ea.language or None,
-                endpoint=ea.endpoint,
-                api_key=ea.api_key,
-                model=ea.model,
-                timeout=ea.timeout,
-            )
-        else:
-            self.report({"ERROR"}, f"Unknown engine type: {settings.engine_type}")
-            return None
+        from VSE_Transcrib.engines.local_whisper import LocalWhisperConfig
+        lw = settings.local_whisper
+        return LocalWhisperConfig(
+            language=lw.language or None,
+            model_size=lw.model_size,
+            device=lw.device,
+            compute_type=lw.compute_type,
+            word_timestamps=lw.word_timestamps,
+        )
 
     def _transcript_to_json(self, transcript: "Transcript") -> str:
         """Serialize Transcript to JSON."""
