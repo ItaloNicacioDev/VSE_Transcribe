@@ -234,6 +234,10 @@ class VSETRANSCRIBE_PT_sidebar(Panel):
         row.prop(lw, "compute_type")
         row = box.row()
         row.prop(lw, "word_timestamps")
+        row = box.row()
+        row.prop(lw, "model_dir")
+        row = box.row()
+        row.prop(lw, "model_dir")
 
     def _draw_external_api_settings(self, box, settings):
         """Draw External API specific settings."""
