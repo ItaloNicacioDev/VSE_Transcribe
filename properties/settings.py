@@ -91,7 +91,7 @@ class LocalWhisperProps(PropertyGroup):
             ("float16", "Float16", "Standard GPU precision"),
             ("float32", "Float32", "Highest precision"),
         ],
-        default="float16",
+        default="int8",
     )
 
     word_timestamps: BoolProperty(
