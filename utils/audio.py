@@ -191,8 +191,6 @@ def _mixdown_audio(
             try:
                 bpy.ops.sound.mixdown(
                     filepath=output_path,
-                    sample_rate=sample_rate,
-                    channels="MONO",  # Must be string enum, not int
                     mix_buffer_size=1024,
                     start_frame=frame_start,
                     end_frame=frame_end,
