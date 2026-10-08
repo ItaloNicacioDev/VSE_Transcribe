@@ -108,61 +108,6 @@ class LocalWhisperProps(PropertyGroup):
     )
 
 
-class ExternalAPIProps(PropertyGroup):
-    """Settings for External API engine."""
-
-    endpoint: StringProperty(
-        name="API Endpoint",
-        description="Transcription API endpoint URL",
-        default="https://api.openai.com/v1/audio/transcriptions",
-        # subtype="URL" not valid in Blender 5.2; using NONE
-    )
-
-    api_key: StringProperty(
-        name="API Key",
-        description="API authentication key",
-        default="",
-        subtype="PASSWORD",
-    )
-
-    model: StringProperty(
-        name="Model",
-        description="Model identifier for the API",
-        default="whisper-1",
-    )
-
-    timeout: FloatProperty(
-        name="Timeout (s)",
-        description="Request timeout in seconds",
-        default=30.0,
-        min=1.0,
-        max=300.0,
-    )
-
-    max_retries: IntProperty(
-        name="Max Retries",
-        description="Maximum number of retry attempts for failed requests",
-        default=3,
-        min=0,
-        max=10,
-    )
-
-    retry_backoff: FloatProperty(
-        name="Retry Backoff (s)",
-        description="Base backoff time for retries (exponential)",
-        default=1.0,
-        min=0.0,
-        max=30.0,
-    )
-
-    language: StringProperty(
-        name="Language",
-        description="Language code (empty = auto-detect)",
-        default="",
-        maxlen=10,
-    )
-
-
 class SubtitleProps(PropertyGroup):
     """Settings for subtitle generation."""
 
@@ -208,20 +153,8 @@ class GeneratedStripName(PropertyGroup):
 class VSETranscribeSettings(PropertyGroup):
     """Main settings for VSE_Transcribe addon."""
 
-    # Engine selection
-    engine_type: EnumProperty(
-        name="Engine",
-        description="Transcription engine to use",
-        items=[
-            ("local_whisper", "Local Whisper", "Run Whisper locally (faster-whisper / whisper)"),
-            ("external_api", "External API", "Use cloud transcription API (OpenAI-compatible)"),
-        ],
-        default="local_whisper",
-    )
-
-    # Engine-specific settings (nested PropertyGroups)
+    # Local Whisper settings
     local_whisper: PointerProperty(type=LocalWhisperProps)
-    external_api: PointerProperty(type=ExternalAPIProps)
 
     # Subtitle generation settings
     subtitle: PointerProperty(type=SubtitleProps)
