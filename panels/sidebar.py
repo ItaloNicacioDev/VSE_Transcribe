@@ -93,7 +93,8 @@ class VSETRANSCRIBE_PT_sidebar(Panel):
                 for i, s in enumerate(strips):
                     row = debug_box.row()
                     row.scale_y = 0.7
-                    sel_mark = " ✓" if s.select else ""
+                    is_selected = getattr(s, "select_get", lambda: s.select)()
+                    sel_mark = " ✓" if is_selected else ""
                     act_mark = " ★" if getattr(seq_editor, "active_strip", None) == s else ""
                     row.label(text=f"{i}: {s.name} | Type: {s.type} | Ch:{s.channel}{sel_mark}{act_mark}")
             else:
@@ -255,9 +256,10 @@ class VSETRANSCRIBE_PT_sidebar(Panel):
             if strips is None:
                 strips = getattr(seq_editor, "sequences", [])
 
-            # Strategy 1: Check selected strips (Blender 5.2+)
+            # Strategy 1: Check selected strips (Blender 5.2+ uses select_get())
             for strip in strips:
-                if strip.select and strip.type in {"SOUND", "MOVIE"}:
+                is_selected = getattr(strip, "select_get", lambda: strip.select)()
+                if is_selected and strip.type in {"SOUND", "MOVIE"}:
                     return strip
 
             # Strategy 2: Check active strip
