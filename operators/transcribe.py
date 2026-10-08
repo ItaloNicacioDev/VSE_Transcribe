@@ -218,6 +218,47 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
             transcript_json = self._transcript_to_json(transcript)
             settings.transcript_storage = transcript_json
             self.report({"INFO"}, f"Transcription complete: {len(transcript.segments)} segments, {transcript.total_words} words")
+            
+            # Auto-generate subtitle strips
+            try:
+                # Prepare subtitle config from settings
+                from VSE_Transcrib.core.subtitle_engine import SubtitleConfig, prepare_subtitles
+                subtitle_config = SubtitleConfig(
+                    max_chars_per_line=settings.subtitle.max_chars_per_line,
+                    max_lines=settings.subtitle.max_lines,
+                    min_duration=settings.subtitle.min_duration,
+                    gap_threshold=settings.subtitle.gap_threshold,
+                )
+                
+                # Generate subtitle blocks
+                blocks = prepare_subtitles(transcript, subtitle_config)
+                
+                if blocks:
+                    # Get or create sequence editor
+                    scene = context.scene
+                    if not scene.sequence_editor:
+                        scene.sequence_editor_create()
+                    
+                    sequencer = scene.sequence_editor
+                    
+                    # Create strips via StripManager
+                    from VSE_Transcrib.core.strip_manager import StripManager
+                    manager = StripManager(scene, sequencer)
+                    # Use a reasonable default channel (e.g., channel 5 for subtitles)
+                    channel = 5
+                    strips = manager.create_subtitle_strips(blocks, channel)
+                    
+                    # Store strip names for clearing later
+                    settings.generated_strips.clear()
+                    for strip in strips:
+                        item = settings.generated_strips.add()
+                        item.name = strip.name
+                    
+                    self.report({"INFO"}, f"Created {len(strips)} subtitle strips on channel {channel}")
+                else:
+                    self.report({"WARNING"}, "No subtitle blocks generated from transcript")
+            except Exception as e:
+                self.report({"ERROR"}, f"Failed to generate subtitle strips: {e}")
 
     @staticmethod
     def _get_active_audio_strip(context: Context):
