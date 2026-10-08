@@ -188,28 +188,55 @@ class VSETRANSCRIBE_PT_sidebar(Panel):
                 seg_count = len(data.get("segments", []))
                 lang = data.get("language", "?")
                 dur = data.get("duration", 0)
-                
+
                 layout.separator()
                 box = layout.box()
                 box.label(text="Transcript Ready", icon="CHECKMARK")
                 row = box.row()
                 row.label(text=f"{seg_count} segments  •  {lang}  •  {dur:.1f}s")
-                
+
                 # Auto-generate subtitles button
                 row = box.row()
                 row.scale_y = 1.2
                 op = row.operator("vse_transcribe.generate_subtitles", text="Create Subtitle Strips", icon="PLUS")
-                
+
                 # Show subtitle settings compact
                 layout.separator()
                 self._draw_subtitle_settings_compact(layout, settings)
             except Exception:
                 pass
 
+        # Show transcription progress if active
+        if settings.is_transcribing:
+            try:
+                layout.separator()
+                box = layout.box()
+                box.label(text="Transcribing...", icon="TIME")
+                # Progress bar
+                row = box.row()
+                row.prop(settings, "transcription_progress", text="")
+                row = box.row()
+                row.label(text=f"Progress: {settings.transcription_progress*100:.1f}%")
+                # Current word
+                if settings.last_word:
+                    row = box.row()
+                    row.label(text=f"Current word: {settings.last_word}", icon="SOUND")
+                # Elapsed time
+                if settings.transcription_elapsed > 0:
+                    mins = int(settings.transcription_elapsed // 60)
+                    secs = int(settings.transcription_elapsed % 60)
+                    row = box.row()
+                    row.label(text=f"Elapsed: {mins:02d}:{secs:02d}")
+                # Animated icon (simple spinner)
+                icons = ['TIME', 'FILE_REFRESH', 'FILE_TICK', 'FILE_CHECK', 'FILE_NEW', 'FILE_FOLDER', 'FILE_BLEND', 'FILE_SCRIPT']
+                icon_idx = settings.transcription_icon_index % len(icons)
+                row = box.row()
+                row.label(text="", icon=icons[icon_idx])
+            except Exception as e:
+                # Silently ignore UI errors during transcription to avoid crashing
+                pass
+
     def _draw_local_whisper_settings(self, box, settings):
-        """Draw Local Whisper specific settings."""
-        lw = settings.local_whisper
-        row = box.row()
         row.prop(lw, "model_size")
         row = box.row()
         row.prop(lw, "device")
