@@ -80,27 +80,28 @@ class VSETRANSCRIBE_PT_sidebar(Panel):
         box = layout.box()
         box.label(text="Source Strip", icon="SEQ_SEQUENCER")
 
-        # DEBUG: Show all strips found in timeline
-        debug_box = box.box()
-        debug_box.label(text="Debug: All Strips in Timeline", icon="INFO")
-        try:
-            seq_editor = context.scene.sequence_editor
-            if seq_editor:
-                # Try sequences_all (Blender 5.2+) fallback to sequences
-                strips = getattr(seq_editor, "sequences_all", None)
-                if strips is None:
-                    strips = getattr(seq_editor, "sequences", [])
-                for i, s in enumerate(strips):
-                    row = debug_box.row()
-                    row.scale_y = 0.7
-                    is_selected = getattr(s, "select_get", lambda: s.select)()
-                    sel_mark = " ✓" if is_selected else ""
-                    act_mark = " ★" if getattr(seq_editor, "active_strip", None) == s else ""
-                    row.label(text=f"{i}: {s.name} | Type: {s.type} | Ch:{s.channel}{sel_mark}{act_mark}")
-            else:
-                debug_box.label(text="No sequence editor")
-        except Exception as e:
-            debug_box.label(text=f"Debug error: {e}")
+        # DEBUG: Show all strips found in timeline (only in advanced mode)
+        if settings.show_advanced:
+            debug_box = box.box()
+            debug_box.label(text="Debug: All Strips in Timeline", icon="INFO")
+            try:
+                seq_editor = context.scene.sequence_editor
+                if seq_editor:
+                    # Try sequences_all (Blender 5.2+) fallback to sequences
+                    strips = getattr(seq_editor, "sequences_all", None)
+                    if strips is None:
+                        strips = getattr(seq_editor, "sequences", [])
+                    for i, s in enumerate(strips):
+                        row = debug_box.row()
+                        row.scale_y = 0.7
+                        is_selected = getattr(s, "select_get", lambda: s.select)()
+                        sel_mark = " ✓" if is_selected else ""
+                        act_mark = " ★" if getattr(seq_editor, "active_strip", None) == s else ""
+                        row.label(text=f"{i}: {s.name} | Type: {s.type} | Ch:{s.channel}{sel_mark}{act_mark}")
+                else:
+                    debug_box.label(text="No sequence editor")
+            except Exception as e:
+                debug_box.label(text=f"Debug error: {e}")
 
         if strip:
             # Show strip info prominently
@@ -228,6 +229,10 @@ class VSETRANSCRIBE_PT_sidebar(Panel):
         row.prop(ea, "model")
         row = box.row()
         row.prop(ea, "timeout")
+        row = box.row()
+        row.prop(ea, "max_retries")
+        row = box.row()
+        row.prop(ea, "retry_backoff")
 
     def _draw_subtitle_settings_compact(self, layout, settings):
         """Draw compact subtitle settings."""
