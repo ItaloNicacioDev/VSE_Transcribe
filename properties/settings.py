@@ -269,6 +269,44 @@ class VSETranscribeSettings(PropertyGroup):
         default="",
     )
 
+    last_word: StringProperty(
+        name="Last Word",
+        description="Last transcribed word",
+        default="",
+    )
+
+    transcription_progress: FloatProperty(
+        name="Transcription Progress",
+        description="Progress of transcription (0.0 to 1.0)",
+        default=0.0,
+        min=0.0,
+        max=1.0,
+        subtype='FACTOR',
+    )
+
+    transcription_elapsed: FloatProperty(
+        name="Elapsed",
+        description="Elapsed time in seconds",
+        default=0.0,
+        min=0.0,
+        soft_max=3600.0,  # 1 hour max
+    )
+
+    transcription_icon_index: IntProperty(
+        name="Icon Index",
+        description="Index for transcribing animation",
+        default=0,
+        min=0,
+        max=7,
+    )
+
+    transcription_job_id: StringProperty(
+        name="Transcription Job ID",
+        description="ID of the current transcription job",
+        default="",
+        options={"HIDDEN", "SKIP_SAVE"},
+    )
+
 
 # Registration functions
 def register_properties():
