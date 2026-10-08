@@ -247,8 +247,11 @@ def _render_audio_fallback(
             if frame_start >= frame_end:
                 return False, f"Invalid frame range: {frame_start} >= {frame_end}"
             
-            # Get correct container/codec
-            container, audio_codec = _get_ffmpeg_container_codec()
+            # Get available container/codec
+            container = _get_available_ffmpeg_format(scene)
+            audio_codec = _get_available_audio_codec(scene, container)
+            
+            print(f"[VSE_Transcribe] Fallback: Using container={container}, audio_codec={audio_codec}")
             
             # Configure render settings
             original_filepath = scene.render.filepath
@@ -305,7 +308,7 @@ def _render_audio_fallback(
             for seq, mute in original_mutes.items():
                 if seq:
                     seq.mute = mute
-                    
+                   
     except Exception as e:
         return False, f"Render fallback failed: {e}"
     
