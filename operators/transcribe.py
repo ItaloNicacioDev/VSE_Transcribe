@@ -176,15 +176,38 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
             return active
 
         return None
+    
+    @staticmethod
+    def _get_strip_audio_path(strip, context: Context) -> str | None:
+        """Get the audio file path from a strip (handles both SOUND and MOVIE types)."""
+        if not _HAS_BPY:
+            return None
+        
+        if strip.type == "SOUND" and strip.sound:
+            filepath = bpy.path.abspath(strip.sound.filepath)
+            if os.path.exists(filepath):
+                return filepath
+        elif strip.type == "MOVIE":
+            # MOVIE strips: check elements for sound
+            try:
+                for element in strip.elements:
+                    if element.sound:
+                        filepath = bpy.path.abspath(element.sound.filepath)
+                        if os.path.exists(filepath):
+                            return filepath
+            except Exception:
+                pass
+        
+        return None
 
     def _get_audio_path(self, context: Context, settings) -> str | None:
         """Get the audio file path from strip or settings."""
         # Try selected/active sound strip first
         strip = self._get_active_audio_strip(context)
-        if strip and strip.sound:
-            filepath = bpy.path.abspath(strip.sound.filepath)
-            if os.path.exists(filepath):
-                return filepath
+        if strip:
+            audio_path = self._get_strip_audio_path(strip, context)
+            if audio_path:
+                return audio_path
 
         # Fallback to audio_source setting
         if settings.audio_source:
