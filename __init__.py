@@ -57,7 +57,7 @@ __version__ = "0.1.12"
 CLASSES = (
     # Operators
     operators.VSETRANSCRIBE_OT_transcribe,
-    operators.VSETRANSCRIBE_OT_generate_subtitles,
+    operators.VSETRANSCRIBE_OT_create_subtitles,
     operators.VSETRANSCRIBE_OT_clear_subtitles,
     operators.VSETRANSCRIBE_OT_export_subtitles,
 
