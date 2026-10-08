@@ -263,6 +263,12 @@ class VSETranscribeSettings(PropertyGroup):
         options={"HIDDEN", "SKIP_SAVE"},
     )
 
+    status_text: StringProperty(
+        name="Status",
+        description="Current status text",
+        default="",
+    )
+
 
 # Registration functions
 def register_properties():
