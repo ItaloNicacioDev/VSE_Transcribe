@@ -62,8 +62,25 @@ class VSETRANSCRIBE_PT_sidebar(Panel):
 
     def _draw_content(self, context: Context) -> None:
         """Main draw logic with proper error handling."""
+        """Draw the panel UI - with full error handling."""
         if not _HAS_BPY:
             return
+
+        layout = self.layout
+
+        # Always show something - defensive coding
+        try:
+            self._draw_content_new(context)
+        except Exception as e:
+            # If anything fails, show error in panel
+            box = layout.box()
+            box.alert = True
+            box.label(text="VSE_Transcribe Error", icon="ERROR")
+            box.label(text=str(e)[:100])
+            import traceback
+            for line in traceback.format_exc().split('\n')[:5]:
+                if line.strip():
+                    box.label(text=line[:100])
 
         layout = self.layout
         
