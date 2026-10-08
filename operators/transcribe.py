@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -58,13 +59,28 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
             self.report({"ERROR"}, "No audio strip selected. Select a SOUND or MOVIE strip in the VSE.")
             return {"CANCELLED"}
 
-        # Extract audio from strip via render (respects trims, volume, effects)
+        # Extract audio from strip via sound.mixdown (fast, respects trims, volume, effects)
         self.report({"INFO"}, "Extracting audio from strip...")
         from VSE_Transcrib.utils.audio import extract_audio_from_strip
         audio_path = extract_audio_from_strip(strip, context.scene)
 
         if not audio_path or not os.path.exists(audio_path):
-            self.report({"ERROR"}, "Failed to extract audio from strip")
+            # Try to get more specific error from the extraction
+            from VSE_Transcrib.utils.audio import _mixdown_audio
+            seq_editor = context.scene.sequence_editor
+            if seq_editor:
+                # Try to get more specific error
+                try:
+                    temp_path = os.path.join(tempfile.gettempdir(), f"vse_transcribe_debug_{os.getpid()}.wav")
+                    success, error = _mixdown_audio(context.scene, context.scene.sequence_editor, temp_path, 16000, [strip])
+                    if error:
+                        self.report({"ERROR"}, f"Failed to extract audio from strip: {error}")
+                    else:
+                        self.report({"ERROR"}, "Failed to extract audio from strip (unknown error)")
+                except Exception as e:
+                    self.report({"ERROR"}, f"Failed to extract audio from strip: {e}")
+            else:
+                self.report({"ERROR"}, "Failed to extract audio from strip (no sequence editor)")
             return {"CANCELLED"}
 
         try:
