@@ -227,34 +227,16 @@ class VSETRANSCRIBE_PT_sidebar(Panel):
                 pass
 
     def _draw_local_whisper_settings(self, box, settings):
-        row.prop(lw, "model_size")
         row = box.row()
-        row.prop(lw, "device")
+        row.prop(settings.local_whisper, "model_size")
         row = box.row()
-        row.prop(lw, "compute_type")
+        row.prop(settings.local_whisper, "device")
         row = box.row()
-        row.prop(lw, "word_timestamps")
+        row.prop(settings.local_whisper, "compute_type")
         row = box.row()
-        row.prop(lw, "model_dir")
+        row.prop(settings.local_whisper, "word_timestamps")
         row = box.row()
-        row.prop(lw, "model_dir")
-
-    def _draw_external_api_settings(self, box, settings):
-        """Draw External API specific settings."""
-        ea = settings.external_api
-        row = box.row()
-        row.prop(ea, "endpoint")
-        row = box.row()
-        row.prop(ea, "api_key")
-        row = box.row()
-        row.prop(ea, "model")
-        row = box.row()
-        row.prop(ea, "timeout")
-        row = box.row()
-        row.prop(ea, "max_retries")
-        row = box.row()
-        row.prop(ea, "retry_backoff")
-
+        row.prop(settings.local_whisper, "model_dir")
     def _draw_subtitle_settings_compact(self, layout, settings):
         """Draw compact subtitle settings."""
         box = layout.box()
