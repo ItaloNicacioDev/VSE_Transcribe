@@ -143,8 +143,6 @@ class VSETRANSCRIBE_PT_sidebar(Panel):
         engine = settings.engine_type
         if engine == "local_whisper":
             self._draw_local_whisper_settings(box, settings)
-        elif engine == "external_api":
-            self._draw_external_api_settings(box, settings)
 
         layout.separator()
 
