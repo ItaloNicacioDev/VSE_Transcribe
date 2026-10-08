@@ -62,17 +62,13 @@ class LocalWhisperProps(PropertyGroup):
 
     model_size: EnumProperty(
         name="Model Size",
-        description="Whisper model size (larger = more accurate, slower)",
+        description="Whisper model size (Small=fastest, Large-v3-Turbo=most accurate)",
         items=[
-            ("tiny", "Tiny", "Fastest, least accurate"),
-            ("base", "Base", "Good balance"),
-            ("small", "Small", "Better accuracy"),
-            ("medium", "Medium", "High accuracy"),
-            ("large", "Large", "Highest accuracy (slow)"),
-            ("large-v2", "Large v2", "Improved large model"),
-            ("large-v3", "Large v3", "Latest large model"),
+            ("small", "Small", "Better accuracy, good speed (~244 MB)"),
+            ("medium", "Medium", "High accuracy, moderate speed (~769 MB)"),
+            ("large-v3-turbo", "Large-v3-Turbo", "Highest accuracy, optimized for speed (~1550 MB)"),
         ],
-        default="base",
+        default="small",
     )
 
     device: EnumProperty(
