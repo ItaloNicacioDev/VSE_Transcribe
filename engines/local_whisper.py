@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 
 from .base import EngineConfig, EngineNotAvailableError, TranscriptionEngine
 from .models.transcript import Transcript, TranscriptSegment, TranscriptWord
+import os
 
 
 # Valid configuration values
@@ -108,12 +109,14 @@ class LocalWhisperEngine(TranscriptionEngine):
         except Exception:
             return False
 
-    def _get_or_load_model(self, model_size: str, device: str, compute_type: str):
+    def _get_or_load_model(self, model_size: str, device: str, compute_type: str, model_dir: str = ""):
         """Get or create cached WhisperModel."""
-        cache_key = (model_size, device, compute_type)
+        cache_key = (model_size, device, compute_type, model_dir)
         if cache_key not in self._model_cache:
             WhisperModel = self._get_faster_whisper()
-            self._model_cache[cache_key] = WhisperModel(model_size, device=device, compute_type=compute_type)
+            if model_dir:
+                os.makedirs(model_dir, exist_ok=True)
+            self._model_cache[cache_key] = WhisperModel(model_size, device=device, compute_type=compute_type, download_root=model_dir)
         return self._model_cache[cache_key]
 
     def transcribe(self, audio_path: str, config: EngineConfig) -> Transcript:
@@ -161,7 +164,7 @@ class LocalWhisperEngine(TranscriptionEngine):
             device = "cuda" if self._has_cuda() else "cpu"
 
         # Get or create model (cached)
-        model = self._get_or_load_model(config.model_size, device, config.compute_type)
+        model = self._get_or_load_model(config.model_size, device, config.compute_type, config.model_dir)
 
         # Run transcription
         segments, info = model.transcribe(
