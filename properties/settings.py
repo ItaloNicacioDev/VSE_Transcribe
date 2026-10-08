@@ -107,6 +107,12 @@ class LocalWhisperProps(PropertyGroup):
         maxlen=10,
     )
 
+    model_dir: StringProperty(
+        name="Model Directory",
+        description="Directory to store Whisper models",
+        default="",
+        subtype='DIR_PATH',
+    )
 
 class SubtitleProps(PropertyGroup):
     """Settings for subtitle generation."""
