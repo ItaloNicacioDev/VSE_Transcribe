@@ -136,13 +136,8 @@ class VSETRANSCRIBE_PT_sidebar(Panel):
         # --- ENGINE SELECTION (compact) ---
         box = layout.box()
         row = box.row()
-        row.label(text="Engine", icon="MODIFIER")
-        row = box.row()
-        row.prop(settings, "engine_type", expand=True)
-
-        engine = settings.engine_type
-        if engine == "local_whisper":
-            self._draw_local_whisper_settings(box, settings)
+        row.label(text="Engine: Local Whisper", icon="FILE_TICK")
+        self._draw_local_whisper_settings(box, settings)
 
         layout.separator()
 
