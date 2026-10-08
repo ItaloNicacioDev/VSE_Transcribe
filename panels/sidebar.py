@@ -1,11 +1,11 @@
-"""Sidebar panel for VSE_Transcribe in the VSE N-panel.
+"""Sidebar panel for VSE_Transcribe in the 3D Viewport N-panel.
 
 Workflow:
-1. User selects video/audio strip in VSE
-2. Panel shows strip info + auto-detects language
+1. User selects video/audio file or VSE strip
+2. Panel shows source info + auto-detects language
 3. User selects/confirms target language
 4. Click "Transcribe" button
-5. Addon transcribes and auto-creates Text Strips synced with strip timing
+5. Addon transcribes and creates subtitle strips in VSE
 """
 
 from __future__ import annotations
@@ -23,17 +23,17 @@ except ImportError:
 
 
 class VSETRANSCRIBE_PT_sidebar(Panel):
-    """VSE_Transcribe panel in the VSE Sidebar (N-panel)."""
+    """VSE_Transcribe panel in the 3D Viewport Sidebar (N-panel)."""
 
     bl_label = "VSE_Transcribe"
     bl_idname = "VSETRANSCRIBE_PT_sidebar"
-    bl_space_type = "SEQUENCE_EDITOR"
+    bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
-    bl_category = "VSE_Transcribe"
+    bl_category = "VSE Transcribe"
 
     @classmethod
     def poll(cls, context: Context) -> bool:
-        """Show panel only in VSE."""
+        """Show panel in 3D Viewport when VSE Transcribe addon is enabled."""
         try:
             return _HAS_BPY and context.scene and context.scene.sequence_editor is not None
         except Exception:
