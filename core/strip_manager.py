@@ -187,7 +187,7 @@ class StripManager:
         if not _HAS_BPY:
             raise RuntimeError("bpy indisponível: fora do runtime do Blender")
         out: List["TextSequence"] = []
-        for seq in self.sequencer.sequences_all:
+        for seq in _get_sequences_local(self.sequencer):
             if seq.get(MANAGED_KEY):
                 out.append(seq)
         return out
@@ -212,7 +212,7 @@ class StripManager:
         Retorna ``None`` se o canal está vazio.
         """
         end: Optional[int] = None
-        for seq in self.sequencer.sequences_all:
+        for seq in _get_sequences_local(self.sequencer):
             if seq.channel == channel:
                 frame_end = seq.frame_final_end
                 if end is None or frame_end > end:
