@@ -30,6 +30,13 @@ except ImportError:  # fora do Blender (testes de sintaxe / lint apenas)
     TextSequence = object  # type: ignore
     _HAS_BPY = False
 
+# Helper local para compatibilidade Blender 5.2+ (sequences_all) / 4.x (sequences)
+def _get_sequences_local(seq_editor: "SequenceEditor") -> List:
+    """Get sequences list with Blender version compatibility."""
+    if seq_editor is None:
+        return []
+    return getattr(seq_editor, "sequences_all", None) or getattr(seq_editor, "sequences", [])
+
 # Importação tolerante: o Subagente 1 pode ainda não ter entregue os módulos.
 try:
     from .subtitle_engine import SubtitleBlock  # type: ignore
