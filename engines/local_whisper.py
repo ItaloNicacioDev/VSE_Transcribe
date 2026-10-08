@@ -14,7 +14,7 @@ from VSE_Transcrib.models.transcript import Transcript, TranscriptSegment, Trans
 
 
 # Valid configuration values
-VALID_MODEL_SIZES = ("tiny", "base", "small", "medium", "large", "large-v2", "large-v3")
+VALID_MODEL_SIZES = ("small", "medium", "large-v3-turbo")
 VALID_DEVICES = ("cpu", "cuda", "auto")
 VALID_COMPUTE_TYPES = ("int8", "int8_float16", "float16", "float32")
 
@@ -23,7 +23,7 @@ VALID_COMPUTE_TYPES = ("int8", "int8_float16", "float16", "float32")
 class LocalWhisperConfig(EngineConfig):
     """Configuration for LocalWhisperEngine."""
 
-    model_size: str = "base"
+    model_size: str = "small"
     device: str = "auto"
     word_timestamps: bool = False
     compute_type: str = "float16"
