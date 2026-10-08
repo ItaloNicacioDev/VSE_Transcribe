@@ -9,6 +9,7 @@ import json
 import os
 import tempfile
 import threading
+import time
 from typing import TYPE_CHECKING, Callable, Optional
 
 if TYPE_CHECKING:
@@ -102,10 +103,18 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
                 "context": context,
                 "result": None,
                 "error": None,
+                "start_time": time.time(),
+                "transcript_duration": 0.0,
+                "word_list": [],
+                "progress": 0.0,
+                "current_word": "",
+                "last_update": time.time(),
             }
 
         # Mark as transcribing
         settings.is_transcribing = True
+        settings.transcription_job_id = job_id
+        settings.transcription_icon_index = 0  # reset animation icon
         self.report({"INFO"}, f"Starting transcription (job: {job_id})...")
 
         # Start background thread
@@ -140,6 +149,14 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
         
         return {"FINISHED"}
 
+    def _transcription_progress_callback(self, job_id: str, progress: float, current_word: str = ""):
+        """Callback for transcription progress updates."""
+        with _transcription_lock:
+            if job_id in _transcription_results:
+                _transcription_results[job_id]["progress"] = progress
+                _transcription_results[job_id]["current_word"] = current_word
+                _transcription_results[job_id]["last_update"] = time.time()
+
     def _run_transcription_thread(self, job_id: str, audio_path: str, settings, strip):
         """Background thread for transcription."""
         try:
@@ -168,8 +185,8 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
                     _transcription_results[job_id]["error"] = "Invalid configuration"
                 return
 
-            # Run transcription
-            transcript = engine.transcribe(audio_path, config)
+            # Run transcription with progress callback if supported
+            transcript = engine.transcribe(audio_path, config, progress_callback=self._transcription_progress_callback)
 
             # Validate transcript
             from VSE_Transcrib.core.transcription import validate_transcript, normalize_transcript
@@ -183,25 +200,35 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
 
             # Store result
             with _transcription_lock:
-                _transcription_results[job_id]["status"] = "finished"
-                _transcription_results[job_id]["result"] = transcript
+                if job_id in _transcription_results:
+                    _transcription_results[job_id]["status"] = "finished"
+                    _transcription_results[job_id]["result"] = transcript
 
         except EngineNotAvailableError as e:
             with _transcription_lock:
-                _transcription_results[job_id]["status"] = "error"
-                _transcription_results[job_id]["error"] = f"Engine not available: {e}"
+                if job_id in _transcription_results:
+                    _transcription_results[job_id]["status"] = "error"
+                    _transcription_results[job_id]["error"] = f"Engine '{settings.engine_type}' not available: {e}"
+            return
         except InvalidConfigError as e:
             with _transcription_lock:
-                _transcription_results[job_id]["status"] = "error"
-                _transcription_results[job_id]["error"] = f"Invalid configuration: {e}"
+                if job_id in _transcription_results:
+                    _transcription_results[job_id]["status"] = "error"
+                    _transcription_results[job_id]["error"] = f"Invalid configuration: {e}"
+            return
         except TranscriptionError as e:
             with _transcription_lock:
-                _transcription_results[job_id]["status"] = "error"
-                _transcription_results[job_id]["error"] = f"Transcription failed: {e}"
+                if job_id in _transcription_results:
+                    _transcription_results[job_id]["status"] = "error"
+                    _transcription_results[job_id]["error"] = f"Transcription failed: {e}"
+            return
         except Exception as e:
+            # Catch any other unexpected errors
             with _transcription_lock:
-                _transcription_results[job_id]["status"] = "error"
-                _transcription_results[job_id]["error"] = f"Unexpected error: {e}"
+                if job_id in _transcription_results:
+                    _transcription_results[job_id]["status"] = "error"
+                    _transcription_results[job_id]["error"] = f"Unexpected error: {e}"
+            return
         finally:
             # Cleanup temp audio file
             try:
@@ -210,17 +237,18 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
             except Exception:
                 pass
 
-    def _process_transcription_result(self, result, settings, context):
+    @classmethod
+    def _process_transcription_result(cls, result, settings, context):
         """Process completed transcription result on main thread."""
-        self.report({"INFO"}, f"[_process_transcription_result] Called with result status: {result.get('status', 'unknown')}")
+        cls._report_info(context, f"[_process_transcription_result] Called with result status: {result.get('status', 'unknown')}")
         transcript = result["result"]
         if not transcript:
-            self.report({"WARNING"}, "No transcript result received")
+            cls._report_warning(context, "No transcript result received")
             return
             # Serialize and store
-            transcript_json = self._transcript_to_json(transcript)
+            transcript_json = cls._transcript_to_json(transcript)
             settings.transcript_storage = transcript_json
-            self.report({"INFO"}, f"Transcription complete: {len(transcript.segments)} segments, {transcript.total_words} words")
+            cls._report_info(context, f"Transcription complete: {len(transcript.segments)} segments, {transcript.total_words} words")
             
             # Auto-generate subtitle strips
             try:
@@ -257,52 +285,26 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
                         item = settings.generated_strips.add()
                         item.name = strip.name
                     
-                    self.report({"INFO"}, f"Created {len(strips)} subtitle strips on channel {channel}")
+                    cls._report_info(context, f"Created {len(strips)} subtitle strips on channel {channel}")
                 else:
-                    self.report({"WARNING"}, "No subtitle blocks generated from transcript")
+                    cls._report_warning(context, "No subtitle blocks generated from transcript")
             except Exception as e:
-                self.report({"ERROR"}, f"Failed to generate subtitle strips: {e}")
-            
-            # Auto-generate subtitle strips
-            try:
-                # Prepare subtitle config from settings
-                from VSE_Transcrib.core.subtitle_engine import SubtitleConfig, prepare_subtitles
-                subtitle_config = SubtitleConfig(
-                    max_chars_per_line=settings.subtitle.max_chars_per_line,
-                    max_lines=settings.subtitle.max_lines,
-                    min_duration=settings.subtitle.min_duration,
-                    gap_threshold=settings.subtitle.gap_threshold,
-                )
-                
-                # Generate subtitle blocks
-                blocks = prepare_subtitles(transcript, subtitle_config)
-                
-                if blocks:
-                    # Get or create sequence editor
-                    scene = context.scene
-                    if not scene.sequence_editor:
-                        scene.sequence_editor_create()
-                    
-                    sequencer = scene.sequence_editor
-                    
-                    # Create strips via StripManager
-                    from VSE_Transcrib.core.strip_manager import StripManager
-                    manager = StripManager(scene, sequencer)
-                    # Use a reasonable default channel (e.g., channel 5 for subtitles)
-                    channel = 5
-                    strips = manager.create_subtitle_strips(blocks, channel)
-                    
-                    # Store strip names for clearing later
-                    settings.generated_strips.clear()
-                    for strip in strips:
-                        item = settings.generated_strips.add()
-                        item.name = strip.name
-                    
-                    self.report({"INFO"}, f"Created {len(strips)} subtitle strips on channel {channel}")
-                else:
-                    self.report({"WARNING"}, "No subtitle blocks generated from transcript")
-            except Exception as e:
-                self.report({"ERROR"}, f"Failed to generate subtitle strips: {e}")
+                cls._report_error(context, f"Failed to generate subtitle strips: {e}")
+    
+    @staticmethod
+    def _report_info(context, message):
+        if hasattr(context, 'window_manager'):
+            context.window_manager.popup_menu(lambda self, ctx: self.layout.label(text=message), title="Info", icon='INFO')
+    
+    @staticmethod
+    def _report_warning(context, message):
+        if hasattr(context, 'window_manager'):
+            context.window_manager.popup_menu(lambda self, ctx: self.layout.label(text=message), title="Warning", icon='WARNING')
+    
+    @staticmethod
+    def _report_error(context, message):
+        if hasattr(context, 'window_manager'):
+            context.window_manager.popup_menu(lambda self, ctx: self.layout.label(text=message), title="Error", icon='ERROR')
 
     @staticmethod
     def _get_active_audio_strip(context: Context):
