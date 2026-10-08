@@ -183,6 +183,7 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
         if not _HAS_BPY:
             return None
         
+        import bpy
         if strip.type == "SOUND" and strip.sound:
             filepath = bpy.path.abspath(strip.sound.filepath)
             if os.path.exists(filepath):
