@@ -28,7 +28,6 @@ class LocalWhisperConfig(EngineConfig):
     word_timestamps: bool = False
     compute_type: str = "float16"
     model_dir: str = ""
-    model_dir: str = ""
 
     def __post_init__(self):
         super().__post_init__()
