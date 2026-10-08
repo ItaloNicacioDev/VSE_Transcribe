@@ -163,6 +163,8 @@ class LocalWhisperEngine(TranscriptionEngine):
         if device == "auto":
             device = "cuda" if self._has_cuda() else "cpu"
 
+        if config.model_dir:
+            os.environ["WHISPER_CACHE_DIR"] = config.model_dir
         # Get or create model (cached)
         model = self._get_or_load_model(config.model_size, device, config.compute_type, config.model_dir)
 
