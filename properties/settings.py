@@ -143,6 +143,22 @@ class ExternalAPIProps(PropertyGroup):
         max=300.0,
     )
 
+    max_retries: IntProperty(
+        name="Max Retries",
+        description="Maximum number of retry attempts for failed requests",
+        default=3,
+        min=0,
+        max=10,
+    )
+
+    retry_backoff: FloatProperty(
+        name="Retry Backoff (s)",
+        description="Base backoff time for retries (exponential)",
+        default=1.0,
+        min=0.0,
+        max=30.0,
+    )
+
     language: StringProperty(
         name="Language",
         description="Language code (empty = auto-detect)",
