@@ -212,8 +212,11 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
 
     def _process_transcription_result(self, result, settings, context):
         """Process completed transcription result on main thread."""
+        self.report({"INFO"}, f"[_process_transcription_result] Called with result status: {result.get('status', 'unknown')}")
         transcript = result["result"]
-        if transcript:
+        if not transcript:
+            self.report({"WARNING"}, "No transcript result received")
+            return
             # Serialize and store
             transcript_json = self._transcript_to_json(transcript)
             settings.transcript_storage = transcript_json
