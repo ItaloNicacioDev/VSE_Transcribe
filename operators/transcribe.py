@@ -163,7 +163,6 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
             # Import engine and config
             from VSE_Transcrib.engines import get_engine
             from VSE_Transcrib.engines.local_whisper import LocalWhisperConfig
-            from VSE_Transcrib.engines.external_api import ExternalAPIConfig
             from VSE_Transcrib.engines.base import EngineNotAvailableError, InvalidConfigError, TranscriptionError
 
             # Get engine class
