@@ -47,9 +47,12 @@ class VSETRANSCRIBE_OT_generate_subtitles(Operator):
 
         settings = context.scene.vse_transcribe
 
-        # Deserialize transcript
+        # Deserialize transcript with error handling
         try:
             transcript = self._json_to_transcript(settings.transcript_storage)
+        except json.JSONDecodeError as e:
+            self.report({"ERROR"}, f"Invalid transcript JSON: {e}")
+            return {"CANCELLED"}
         except Exception as e:
             self.report({"ERROR"}, f"Failed to parse transcript: {e}")
             return {"CANCELLED"}
