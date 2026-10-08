@@ -152,10 +152,7 @@ class VSETRANSCRIBE_PT_sidebar(Panel):
 
         row = box.row()
         # Auto-detect option
-        if engine == "local_whisper":
-            row.prop(settings.local_whisper, "language", text="")
-        elif engine == "external_api":
-            row.prop(settings.external_api, "language", text="")
+        row.prop(settings.local_whisper, "language", text="")
         
         # Auto-detect hint
         row = box.row()
