@@ -58,7 +58,8 @@ except Exception:  # pragma: no cover - fallback estrutural
 
 
 # Chave custom ID-property usada para marcar strips gerenciados pelo addon.
-MANAGED_KEY = "vse_transcribe_managed"
+# Duplo underscore para evitar colisão com outras propriedades.
+MANAGED_KEY = "__vse_transcribe_managed__"
 
 # Limites aceitos de canal no VSE.
 MIN_CHANNEL = 1
