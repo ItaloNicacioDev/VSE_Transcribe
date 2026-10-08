@@ -111,11 +111,18 @@ class LocalWhisperEngine(TranscriptionEngine):
 
     def _get_or_load_model(self, model_size: str, device: str, compute_type: str, model_dir: str = ""):
         """Get or create cached WhisperModel."""
+        # If model_dir is not set, default to a "models" subdirectory in the addon root
+        if not model_dir:
+            # Get the directory of this file (engines/local_whisper.py)
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            # Go up two levels to get the addon root (engines/.. -> addon root)
+            addon_root = os.path.dirname(os.path.dirname(current_dir))
+            # Default model directory is addon_root/models
+            model_dir = os.path.join(addon_root, "models")
         cache_key = (model_size, device, compute_type, model_dir)
         if cache_key not in self._model_cache:
             WhisperModel = self._get_faster_whisper()
-            if model_dir:
-                os.makedirs(model_dir, exist_ok=True)
+            os.makedirs(model_dir, exist_ok=True)
             self._model_cache[cache_key] = WhisperModel(model_size, device=device, compute_type=compute_type, download_root=model_dir)
         return self._model_cache[cache_key]
 
