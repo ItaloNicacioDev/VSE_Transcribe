@@ -6,10 +6,9 @@ Provides transcription via external HTTP API (OpenAI Whisper API, custom endpoin
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
-
-import requests
 
 from .base import EngineConfig, EngineNotAvailableError, TranscriptionEngine
 from VSE_Transcrib.models.transcript import Transcript, TranscriptSegment, TranscriptWord
@@ -23,6 +22,8 @@ class ExternalAPIConfig(EngineConfig):
     api_key: str = ""
     model: str = "whisper-1"
     timeout: float = 30.0
+    max_retries: int = 3
+    retry_backoff: float = 1.0  # seconds
     headers: Optional[Dict[str, str]] = None
 
     def __post_init__(self):
@@ -38,6 +39,33 @@ class ExternalAPIEngine(TranscriptionEngine):
 
     name = "external_api"
 
+    def __init__(self):
+        self._requests = None
+
+    def _get_requests(self):
+        """Lazy import requests with retry adapter."""
+        if self._requests is None:
+            try:
+                import requests
+                from requests.adapters import HTTPAdapter
+                from urllib3.util.retry import Retry
+                
+                # Create session with retry strategy
+                session = requests.Session()
+                retry_strategy = Retry(
+                    total=3,
+                    backoff_factor=1.0,
+                    status_forcelist=[429, 500, 502, 503, 504],
+                    allowed_methods=["HEAD", "GET", "POST", "OPTIONS"],
+                )
+                adapter = HTTPAdapter(max_retries=retry_strategy)
+                session.mount("http://", adapter)
+                session.mount("https://", adapter)
+                self._requests = session
+            except ImportError as e:
+                raise EngineNotAvailableError("requests library not installed. Install with: pip install requests") from e
+        return self._requests
+
     def _validate_config(self, config: EngineConfig) -> None:
         """Validate engine configuration."""
         if not isinstance(config, ExternalAPIConfig):
@@ -49,6 +77,10 @@ class ExternalAPIEngine(TranscriptionEngine):
             raise ValueError("api_key is required and must be a non-empty string")
         if not isinstance(config.timeout, (int, float)) or config.timeout <= 0:
             raise ValueError("timeout must be a positive number")
+        if not isinstance(config.max_retries, int) or config.max_retries < 0:
+            raise ValueError("max_retries must be a non-negative integer")
+        if not isinstance(config.retry_backoff, (int, float)) or config.retry_backoff < 0:
+            raise ValueError("retry_backoff must be a non-negative number")
 
     def _check_dependencies(self) -> bool:
         """Check if requests library is available."""
@@ -59,7 +91,7 @@ class ExternalAPIEngine(TranscriptionEngine):
             return False
 
     def transcribe(self, audio_path: str, config: EngineConfig) -> Transcript:
-        """Transcribe audio via external API."""
+        """Transcribe audio via external API with retry logic."""
         if not isinstance(config, ExternalAPIConfig):
             raise TypeError(f"Expected ExternalAPIConfig, got {type(config).__name__}")
 
@@ -75,7 +107,7 @@ class ExternalAPIEngine(TranscriptionEngine):
     def _transcribe_via_api(
         self, audio_path: str, config: ExternalAPIConfig
     ) -> Transcript:
-        """Send audio to API and convert response to Transcript."""
+        """Send audio to API and convert response to Transcript with retries."""
         # Prepare headers
         headers = {
             "Authorization": f"Bearer {config.api_key}",
@@ -83,27 +115,46 @@ class ExternalAPIEngine(TranscriptionEngine):
         if config.headers:
             headers.update(config.headers)
 
-        # Prepare files for multipart upload
-        with open(audio_path, "rb") as audio_file:
-            files = {
-                "file": (audio_path, audio_file, "audio/wav"),
-                "model": (None, config.model),
-            }
+        # Get session with retry adapter
+        session = self._get_requests()
 
-            if config.language:
-                files["language"] = (None, config.language)
+        last_exception = None
+        for attempt in range(config.max_retries + 1):
+            try:
+                # Prepare files for multipart upload
+                with open(audio_path, "rb") as audio_file:
+                    files = {
+                        "file": (audio_path, audio_file, "audio/wav"),
+                        "model": (None, config.model),
+                    }
 
-            response = requests.post(
-                config.endpoint,
-                headers=headers,
-                files=files,
-                timeout=config.timeout,
-            )
+                    if config.language:
+                        files["language"] = (None, config.language)
 
-        response.raise_for_status()
-        result = response.json()
+                    response = session.post(
+                        config.endpoint,
+                        headers=headers,
+                        files=files,
+                        timeout=config.timeout,
+                    )
 
-        return self._convert_api_result(result, config)
+                response.raise_for_status()
+                result = response.json()
+
+                return self._convert_api_result(result, config)
+
+            except Exception as e:
+                last_exception = e
+                if attempt < config.max_retries:
+                    wait_time = config.retry_backoff * (2 ** attempt)  # Exponential backoff
+                    time.sleep(wait_time)
+                else:
+                    break
+
+        # All retries exhausted
+        if last_exception:
+            raise EngineNotAvailableError(f"API request failed after {config.max_retries + 1} attempts: {last_exception}")
+        raise EngineNotAvailableError("API request failed for unknown reason")
 
     def _convert_api_result(
         self, result: Dict[str, Any], config: ExternalAPIConfig
