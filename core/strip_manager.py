@@ -251,8 +251,18 @@ class StripManager:
                 frame_end=frame_end,
             )
 
-        # ``text`` é a propriedade padrão do TextSequence em 4.x e 5.x.
-        strip.text = text
+        # ``text`` é a propriedade padrão do TextSequence em 4.x.
+        # Blender 5.x pode usar ``body``. Tentamos ambos.
+        if hasattr(strip, "text"):
+            strip.text = text
+        elif hasattr(strip, "body"):
+            strip.body = text
+        else:
+            # Fallback: tentar definir via setattr
+            try:
+                strip.text = text
+            except Exception:
+                pass
         return strip
 
     @staticmethod
