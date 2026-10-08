@@ -32,6 +32,35 @@ def _get_sequences(seq_editor):
     return getattr(seq_editor, "sequences_all", None) or getattr(seq_editor, "sequences", [])
 
 
+def _validate_strip_has_audio(strip: "Sequence") -> tuple[bool, str]:
+    """Validate that a strip has audio data available."""
+    if strip.type == "SOUND":
+        if not strip.sound:
+            return False, f"SOUND strip '{strip.name}' has no sound data"
+        if not strip.sound.filepath:
+            return False, f"SOUND strip '{strip.name}' has no filepath"
+        # Check if file exists
+        filepath = bpy.path.abspath(strip.sound.filepath)
+        if not os.path.exists(filepath):
+            return False, f"SOUND strip '{strip.name}' file not found: {filepath}"
+        return True, ""
+    elif strip.type == "MOVIE":
+        # Check if movie strip has audio elements
+        try:
+            has_audio = False
+            for element in strip.elements:
+                if element.sound:
+                    has_audio = True
+                    break
+            if not has_audio:
+                return False, f"MOVIE strip '{strip.name}' has no audio track"
+        except Exception:
+            # If we can't check, we'll try anyway but warn
+            pass
+        return True, ""
+    return False, f"Strip '{strip.name}' type '{strip.type}' not supported for audio extraction"
+
+
 def _mixdown_audio(
     scene: "Scene",
     seq_editor,
@@ -49,11 +78,11 @@ def _mixdown_audio(
         if not audio_strips:
             return False, "No audio strips found (need SOUND or MOVIE type)"
         
-        # Check if strips have audio data
+        # Validate each strip has audio data
         for s in audio_strips:
-            if s.type == "MOVIE":
-                # Check if movie strip has audio - we'll try anyway
-                pass
+            valid, msg = _validate_strip_has_audio(s)
+            if not valid:
+                return False, msg
         
         # Determine frame range
         frame_start = min(int(s.frame_final_start) for s in strips)
@@ -137,6 +166,87 @@ def _mixdown_audio(
     return False, "Unknown error"
 
 
+def _render_audio_fallback(
+    scene: "Scene",
+    seq_editor,
+    output_path: str,
+    sample_rate: int,
+    strips: list["Sequence"],
+) -> tuple[bool, str]:
+    """Fallback audio extraction using render.render(animation=True).
+    
+    Slower but more compatible. Returns (success: bool, error_message: str)
+    """
+    try:
+        # Mute non-target strips
+        original_mutes = {}
+        for seq in _get_sequences(seq_editor):
+            original_mutes[seq] = seq.mute
+            seq.mute = seq not in strips
+        
+        try:
+            # Determine frame range
+            frame_start = min(int(s.frame_final_start) for s in strips)
+            frame_end = max(int(s.frame_final_end) for s in strips)
+            
+            if frame_start >= frame_end:
+                return False, f"Invalid frame range: {frame_start} >= {frame_end}"
+            
+            # Configure render settings
+            original_filepath = scene.render.filepath
+            original_format = scene.render.image_settings.file_format
+            original_ffmpeg_format = getattr(scene.render.ffmpeg, "format", None)
+            original_audio_codec = getattr(scene.render.ffmpeg, "audio_codec", None)
+            original_audio_bitrate = getattr(scene.render.ffmpeg, "audio_bitrate", None)
+            original_audio_samplerate = getattr(scene.render.ffmpeg, "audio_sample_rate", None)
+            if original_audio_samplerate is None:
+                original_audio_samplerate = getattr(scene.render.ffmpeg, "audio_samplerate", None)
+            
+            original_frame_start = scene.frame_start
+            original_frame_end = scene.frame_end
+            
+            # Configure for audio-only render
+            scene.render.filepath = output_path
+            scene.render.image_settings.file_format = "FFMPEG"
+            scene.render.ffmpeg.format = "MKV"
+            scene.render.ffmpeg.audio_codec = "PCM"
+            scene.render.ffmpeg.audio_bitrate = 128
+            
+            if hasattr(scene.render.ffmpeg, "audio_sample_rate"):
+                scene.render.ffmpeg.audio_sample_rate = sample_rate
+            elif hasattr(scene.render.ffmpeg, "audio_samplerate"):
+                scene.render.ffmpeg.audio_samplerate = sample_rate
+            
+            scene.frame_start = frame_start
+            scene.frame_end = frame_end
+            
+            # Ensure output directory exists
+            os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+            
+            # Render animation (audio only since no video strips selected)
+            bpy.ops.render.render(animation=True, write_still=False)
+            
+            # Verify output
+            if not os.path.exists(output_path):
+                return False, "Output file was not created by render"
+            
+            if os.path.getsize(output_path) == 0:
+                return False, "Output file is empty (0 bytes)"
+            
+            return True, "Success (fallback render)"
+            
+        finally:
+            # Restore strip mute states
+            for seq, mute in original_mutes.items():
+                if seq:
+                    seq.mute = mute
+                    
+    except Exception as e:
+        return False, f"Render fallback failed: {e}"
+    
+    return False, "Unknown error in render fallback"
+
+
 def extract_audio_from_strip(
     strip: "Sequence",
     scene: "Scene",
@@ -144,9 +254,10 @@ def extract_audio_from_strip(
     sample_rate: int = 16000,
     channels: int = 1,
 ) -> str | None:
-    """Extract audio from a VSE strip using sound.mixdown (fast).
+    """Extract audio from a VSE strip using sound.mixdown (fast) with render fallback.
     
     Uses Blender's sound.mixdown for fast audio extraction.
+    Falls back to render.render(animation=True) if mixdown fails.
     If output_path is not provided, creates a temporary file.
 
     Args:
@@ -184,16 +295,25 @@ def extract_audio_from_strip(
         seq.mute = (seq != strip)
 
     try:
-        # Use sound.mixdown for fast audio extraction
+        # Try sound.mixdown first (fast)
+        print(f"[VSE_Transcribe] Attempting sound.mixdown for strip '{strip.name}'...")
         success, error = _mixdown_audio(scene, scene.sequence_editor, output_path, sample_rate, [strip])
         
         if success and os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+            print(f"[VSE_Transcribe] sound.mixdown succeeded: {output_path}")
             return output_path
         
-        # Log the error for debugging
-        if error:
-            print(f"[VSE_Transcribe] Audio extraction failed: {error}")
+        # Log the error
+        print(f"[VSE_Transcribe] sound.mixdown failed: {error}. Trying render fallback...")
         
+        # Try render fallback
+        success, error = _render_audio_fallback(scene, scene.sequence_editor, output_path, sample_rate, [strip])
+        
+        if success and os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+            print(f"[VSE_Transcribe] Render fallback succeeded: {output_path}")
+            return output_path
+        
+        print(f"[VSE_Transcribe] All extraction methods failed: {error}")
         return None
         
     finally:
@@ -248,15 +368,25 @@ def extract_audio_from_strips(
         seq.mute = seq not in strips
 
     try:
-        # Use sound.mixdown for fast audio extraction
+        # Try sound.mixdown first (fast)
+        print(f"[VSE_Transcribe] Attempting sound.mixdown for {len(strips)} strips...")
         success, error = _mixdown_audio(scene, scene.sequence_editor, output_path, sample_rate, strips)
         
         if success and os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+            print(f"[VSE_Transcribe] sound.mixdown succeeded: {output_path}")
             return output_path
         
-        if error:
-            print(f"[VSE_Transcribe] Audio extraction failed: {error}")
+        # Log the error
+        print(f"[VSE_Transcribe] sound.mixdown failed: {error}. Trying render fallback...")
         
+        # Try render fallback
+        success, error = _render_audio_fallback(scene, scene.sequence_editor, output_path, sample_rate, strips)
+        
+        if success and os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+            print(f"[VSE_Transcribe] Render fallback succeeded: {output_path}")
+            return output_path
+        
+        print(f"[VSE_Transcribe] All extraction methods failed: {error}")
         return None
         
     finally:
