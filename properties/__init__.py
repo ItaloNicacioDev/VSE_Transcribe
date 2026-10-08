@@ -5,7 +5,6 @@ Exports property classes and registration functions.
 
 from .settings import (
     LocalWhisperProps,
-    ExternalAPIProps,
     SubtitleProps,
     GeneratedStripName,
     VSETranscribeSettings,
@@ -15,7 +14,6 @@ from .settings import (
 
 __all__ = [
     "LocalWhisperProps",
-    "ExternalAPIProps",
     "SubtitleProps",
     "GeneratedStripName",
     "VSETranscribeSettings",
