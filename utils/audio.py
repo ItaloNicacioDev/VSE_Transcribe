@@ -146,18 +146,18 @@ def _mixdown_audio(
             os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
             
             # Use sound.mixdown - much faster than render.render
-                        # Note: Don't pass container/codec to mixdown - let it use scene render settings
-         try:
-         bpy.ops.sound.mixdown
-         filepath=output_path,
-         sample_rate=sample_rate,
-         channels=1,  # mono
-         mix_buffer_size=1024,
-         start_frame=frame_start,
-         end_frame=frame_end,
-         )
-         except Exception as e:
-         return False, f"sound.mixdown failed: {e}"
+            # Note: Don't pass container/codec to mixdown - let it use scene render settings
+            try:
+                bpy.ops.sound.mixdown(
+                    filepath=output_path,
+                    sample_rate=sample_rate,
+                    channels=1,  # mono
+                    mix_buffer_size=1024,
+                    start_frame=frame_start,
+                    end_frame=frame_end,
+                )
+            except Exception as e:
+                return False, f"sound.mixdown failed: {e}"
             
             # Verify output
             if not os.path.exists(output_path):
@@ -378,7 +378,7 @@ def extract_audio_from_strips(
         fd, output_path = tempfile.mkstemp(suffix=".wav", prefix="vse_transcribe_")
         os.close(fd)
 
-    os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+    os.makedards(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
 
     seq_editor = scene.sequence_editor
     if not seq_editor:
