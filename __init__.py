@@ -39,7 +39,7 @@ bl_info = {
     "author": "Italo Nicacio",
     "description": "AI-powered transcription and subtitle generation for the Blender Video Sequence Editor.",
     "blender": (5, 2, 0),
-    "version": (0, 1, 0),
+    "version": (0, 1, 11),
     "location": "Video Sequencer > Sidebar > VSE_Transcribe",
     "category": "Sequencer",
     "wiki_url": "https://github.com/ItaloNicacioDev/VSE_Transcribe",
@@ -47,7 +47,7 @@ bl_info = {
     "support": "COMMUNITY",
 }
 
-__version__ = "0.1.0"
+__version__ = "0.1.11"
 
 
 # -----------------------------------------------------------------------------
