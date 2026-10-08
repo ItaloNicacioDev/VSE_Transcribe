@@ -39,6 +39,9 @@ class LocalWhisperEngine(TranscriptionEngine):
 
     name = "local_whisper"
 
+    def __init__(self):
+        self._model_cache = {}
+
     def _validate_config(self, config: EngineConfig) -> None:
         """Validate engine configuration."""
         if not isinstance(config, LocalWhisperConfig):
@@ -70,6 +73,48 @@ class LocalWhisperEngine(TranscriptionEngine):
             pass
         return False
 
+    def _get_faster_whisper(self):
+        """Lazy import faster_whisper."""
+        try:
+            from faster_whisper import WhisperModel
+            return WhisperModel
+        except ImportError as e:
+            raise EngineNotAvailableError("faster-whisper not installed. Install with: pip install faster-whisper") from e
+
+    def _get_whisper(self):
+        """Lazy import whisper."""
+        try:
+            import whisper
+            return whisper
+        except ImportError as e:
+            raise EngineNotAvailableError("whisper not installed. Install with: pip install openai-whisper") from e
+
+    def _get_torch(self):
+        """Lazy import torch for CUDA check."""
+        try:
+            import torch
+            return torch
+        except ImportError:
+            return None
+
+    def _has_cuda(self) -> bool:
+        """Check if CUDA is available."""
+        torch = self._get_torch()
+        if torch is None:
+            return False
+        try:
+            return torch.cuda.is_available()
+        except Exception:
+            return False
+
+    def _get_or_load_model(self, model_size: str, device: str, compute_type: str):
+        """Get or create cached WhisperModel."""
+        cache_key = (model_size, device, compute_type)
+        if cache_key not in self._model_cache:
+            WhisperModel = self._get_faster_whisper()
+            self._model_cache[cache_key] = WhisperModel(model_size, device=device, compute_type=compute_type)
+        return self._model_cache[cache_key]
+
     def transcribe(self, audio_path: str, config: EngineConfig) -> Transcript:
         """Transcribe audio using faster-whisper (preferred) or whisper."""
         if not isinstance(config, LocalWhisperConfig):
@@ -85,13 +130,18 @@ class LocalWhisperEngine(TranscriptionEngine):
         # Try faster-whisper first (faster, lower memory)
         try:
             return self._transcribe_faster_whisper(audio_path, config)
-        except ImportError:
+        except EngineNotAvailableError:
+            pass
+        except Exception as e:
+            # If faster-whisper fails for other reasons, try whisper
             pass
 
         # Fallback to original whisper
         try:
             return self._transcribe_whisper(audio_path, config)
-        except ImportError:
+        except EngineNotAvailableError:
+            pass
+        except Exception:
             pass
 
         raise EngineNotAvailableError(
@@ -102,19 +152,15 @@ class LocalWhisperEngine(TranscriptionEngine):
         self, audio_path: str, config: LocalWhisperConfig
     ) -> Transcript:
         """Transcribe using faster-whisper."""
-        from faster_whisper import WhisperModel
+        WhisperModel = self._get_faster_whisper()
 
         # Resolve device
         device = config.device
         if device == "auto":
             device = "cuda" if self._has_cuda() else "cpu"
 
-        # Create model
-        model = WhisperModel(
-            config.model_size,
-            device=device,
-            compute_type=config.compute_type,
-        )
+        # Get or create model (cached)
+        model = self._get_or_load_model(config.model_size, device, config.compute_type)
 
         # Run transcription
         segments, info = model.transcribe(
@@ -128,7 +174,7 @@ class LocalWhisperEngine(TranscriptionEngine):
 
     def _transcribe_whisper(self, audio_path: str, config: LocalWhisperConfig) -> Transcript:
         """Transcribe using original whisper library."""
-        import whisper
+        whisper = self._get_whisper()
 
         # Resolve device
         device = config.device
@@ -147,14 +193,6 @@ class LocalWhisperEngine(TranscriptionEngine):
 
         # Convert to our Transcript format
         return self._convert_whisper_result(result, config)
-
-    def _has_cuda(self) -> bool:
-        """Check if CUDA is available."""
-        try:
-            import torch
-            return torch.cuda.is_available()
-        except ImportError:
-            return False
 
     def _convert_faster_whisper_result(
         self,
