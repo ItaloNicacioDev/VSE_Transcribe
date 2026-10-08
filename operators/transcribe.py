@@ -161,20 +161,10 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
         """Background thread for transcription."""
         try:
             # Import engine and config
-            from VSE_Transcrib.engines import get_engine
-            from VSE_Transcrib.engines.local_whisper import LocalWhisperConfig
+            from VSE_Transcrib.engines.local_whisper import LocalWhisperEngine, LocalWhisperConfig
             from VSE_Transcrib.engines.base import EngineNotAvailableError, InvalidConfigError, TranscriptionError
 
-            # Get engine class
-            try:
-                engine_cls = get_engine(settings.engine_type)
-            except Exception as e:
-                with _transcription_lock:
-                    _transcription_results[job_id]["status"] = "error"
-                    _transcription_results[job_id]["error"] = f"Engine '{settings.engine_type}' not available: {e}"
-                return
-
-            engine = engine_cls()
+            engine = LocalWhisperEngine()
 
             # Build engine config from settings
             config = self._build_engine_config(settings)
@@ -207,7 +197,7 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
             with _transcription_lock:
                 if job_id in _transcription_results:
                     _transcription_results[job_id]["status"] = "error"
-                    _transcription_results[job_id]["error"] = f"Engine '{settings.engine_type}' not available: {e}"
+                    _transcription_results[job_id]["error"] = f"Local Whisper engine not available: {e}"
             return
         except InvalidConfigError as e:
             with _transcription_lock:
