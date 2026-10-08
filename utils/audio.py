@@ -64,21 +64,12 @@ def _validate_strip_has_audio(strip: "Sequence") -> tuple[bool, str]:
 def _get_ffmpeg_container_codec():
     """Get the correct FFmpeg container/codec for current Blender version.
     
-    Blender 5.2: container='MATROSKA', audio_codec='PCM'
+    Blender 5.2+: container='MKV', audio_codec='PCM'
     Older: container='MKV', audio_codec='PCM'
+    Note: 'MATROSKA' is NOT a valid enum value in Blender - use 'MKV'
     """
-    # Try to detect Blender version via available enums
-    # Blender 5.2 uses 'MATROSKA' instead of 'MKV'
-    try:
-        # Check if MATROSKA is available in ffmpeg.format enum
-        from bpy.types import RenderSettings
-        # We can't easily check enum values, so use version detection
-        import bpy
-        version = bpy.app.version
-        if version >= (5, 2, 0):
-            return "MATROSKA", "PCM"
-    except Exception:
-        pass
+    # Both old and new Blender versions use 'MKV' for Matroska container
+    # 'MATROSKA' was never a valid enum value in bpy
     return "MKV", "PCM"
 
 
