@@ -27,7 +27,7 @@ class LocalWhisperConfig(EngineConfig):
     model_size: str = "small"
     device: str = "auto"
     word_timestamps: bool = False
-    compute_type: str = "float16"
+    compute_type: str = "int8"
     model_dir: str = ""
 
     def __post_init__(self):
