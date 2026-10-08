@@ -23,7 +23,7 @@ except ImportError:
     _HAS_BPY = False
 
 
-class VSETRANSCRIBE_OT_generate_subtitles(Operator):
+class VSETRANSCRIBE_OT_create_subtitles(Operator):
     """Generate subtitle Text Strips from transcribed text."""
 
     bl_idname = "vse_transcribe.create_subtitles"
