@@ -61,6 +61,27 @@ def _validate_strip_has_audio(strip: "Sequence") -> tuple[bool, str]:
     return False, f"Strip '{strip.name}' type '{strip.type}' not supported for audio extraction"
 
 
+def _get_ffmpeg_container_codec():
+    """Get the correct FFmpeg container/codec for current Blender version.
+    
+    Blender 5.2: container='MATROSKA', audio_codec='PCM'
+    Older: container='MKV', audio_codec='PCM'
+    """
+    # Try to detect Blender version via available enums
+    # Blender 5.2 uses 'MATROSKA' instead of 'MKV'
+    try:
+        # Check if MATROSKA is available in ffmpeg.format enum
+        from bpy.types import RenderSettings
+        # We can't easily check enum values, so use version detection
+        import bpy
+        version = bpy.app.version
+        if version >= (5, 2, 0):
+            return "MATROSKA", "PCM"
+    except Exception:
+        pass
+    return "MKV", "PCM"
+
+
 def _mixdown_audio(
     scene: "Scene",
     seq_editor,
@@ -98,6 +119,9 @@ def _mixdown_audio(
             seq.mute = seq not in strips
         
         try:
+            # Get correct container/codec for this Blender version
+            container, audio_codec = _get_ffmpeg_container_codec()
+            
             # Configure render settings for audio mixdown
             original_filepath = scene.render.filepath
             original_format = scene.render.image_settings.file_format
@@ -108,11 +132,11 @@ def _mixdown_audio(
             if original_audio_samplerate is None:
                 original_audio_samplerate = getattr(scene.render.ffmpeg, "audio_samplerate", None)
             
-            # Configure for audio mixdown (MKV container with PCM audio)
+            # Configure for audio mixdown
             scene.render.filepath = output_path
             scene.render.image_settings.file_format = "FFMPEG"
-            scene.render.ffmpeg.format = "MKV"
-            scene.render.ffmpeg.audio_codec = "PCM"
+            scene.render.ffmpeg.format = container
+            scene.render.ffmpeg.audio_codec = audio_codec
             scene.render.ffmpeg.audio_bitrate = 128
             
             # Sample rate
@@ -134,8 +158,8 @@ def _mixdown_audio(
             try:
                 bpy.ops.sound.mixdown(
                     filepath=output_path,
-                    container='MKV',
-                    codec='PCM',
+                    container=container,
+                    codec=audio_codec,
                     sample_rate=sample_rate,
                     channels=1,  # mono
                     mix_buffer_size=1024,
@@ -175,7 +199,7 @@ def _render_audio_fallback(
 ) -> tuple[bool, str]:
     """Fallback audio extraction using render.render(animation=True).
     
-    Slower but more compatible. Returns (success: bool, error_message: str)
+    Configures for audio-only output. Returns (success: bool, error_message: str)
     """
     try:
         # Mute non-target strips
@@ -191,6 +215,9 @@ def _render_audio_fallback(
             
             if frame_start >= frame_end:
                 return False, f"Invalid frame range: {frame_start} >= {frame_end}"
+            
+            # Get correct container/codec
+            container, audio_codec = _get_ffmpeg_container_codec()
             
             # Configure render settings
             original_filepath = scene.render.filepath
@@ -208,8 +235,8 @@ def _render_audio_fallback(
             # Configure for audio-only render
             scene.render.filepath = output_path
             scene.render.image_settings.file_format = "FFMPEG"
-            scene.render.ffmpeg.format = "MKV"
-            scene.render.ffmpeg.audio_codec = "PCM"
+            scene.render.ffmpeg.format = container
+            scene.render.ffmpeg.audio_codec = audio_codec
             scene.render.ffmpeg.audio_bitrate = 128
             
             if hasattr(scene.render.ffmpeg, "audio_sample_rate"):
@@ -217,13 +244,20 @@ def _render_audio_fallback(
             elif hasattr(scene.render.ffmpeg, "audio_samplerate"):
                 scene.render.ffmpeg.audio_samplerate = sample_rate
             
+            # Disable video rendering - only audio
+            scene.render.use_file_extension = False
+            scene.render.film_transparent = True
+            scene.render.resolution_x = 16  # Minimal
+            scene.render.resolution_y = 16  # Minimal
+            scene.render.resolution_percentage = 100
+            
             scene.frame_start = frame_start
             scene.frame_end = frame_end
             
             # Ensure output directory exists
             os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
             
-            # Render animation (audio only since no video strips selected)
+            # Render animation (audio only since no video strips selected/muted)
             bpy.ops.render.render(animation=True, write_still=False)
             
             # Verify output
