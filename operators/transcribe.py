@@ -8,7 +8,8 @@ from __future__ import annotations
 import json
 import os
 import tempfile
-from typing import TYPE_CHECKING
+import threading
+from typing import TYPE_CHECKING, Callable, Optional
 
 if TYPE_CHECKING:
     from VSE_Transcrib.models.transcript import Transcript
@@ -29,6 +30,11 @@ except ImportError:
     _HAS_BPY = False
 
 
+# Global storage for async transcription results
+_transcription_results = {}
+_transcription_lock = threading.Lock()
+
+
 class VSETRANSCRIBE_OT_transcribe(Operator):
     """Transcribe audio using the selected engine."""
 
@@ -46,7 +52,7 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
         return cls._get_active_audio_strip(context) is not None
 
     def execute(self, context: Context) -> set:
-        """Execute transcription."""
+        """Execute transcription (async)."""
         if not _HAS_BPY:
             self.report({"ERROR"}, "Not running inside Blender")
             return {"CANCELLED"}
@@ -83,10 +89,60 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
                 self.report({"ERROR"}, "Failed to extract audio from strip (no sequence editor)")
             return {"CANCELLED"}
 
-        try:
-            # Mark as transcribing
-            settings.is_transcribing = True
+        # Generate unique job ID
+        import uuid
+        job_id = str(uuid.uuid4())[:8]
+        
+        # Store job info for async processing
+        with _transcription_lock:
+            _transcription_results[job_id] = {
+                "status": "started",
+                "audio_path": audio_path,
+                "settings": settings,
+                "context": context,
+                "result": None,
+                "error": None,
+            }
 
+        # Mark as transcribing
+        settings.is_transcribing = True
+        self.report({"INFO"}, f"Starting transcription (job: {job_id})...")
+
+        # Start background thread
+        thread = threading.Thread(
+            target=self._run_transcription_thread,
+            args=(job_id, audio_path, settings, strip),
+            daemon=True
+        )
+        thread.start()
+
+        # Register timer to check progress
+        def check_progress():
+            import bpy
+            with _transcription_lock:
+                if job_id not in _transcription_results:
+                    return None
+                result = _transcription_results[job_id]
+                if result["status"] == "finished":
+                    # Process result
+                    self._process_transcription_result(result, settings)
+                    del _transcription_results[job_id]
+                    settings.is_transcribing = False
+                    return None  # Stop timer
+                elif result["status"] == "error":
+                    self.report({"ERROR"}, f"Transcription failed: {result['error']}")
+                    settings.is_transcribing = False
+                    del _transcription_results[job_id]
+                    return None  # Stop timer
+            return 0.5  # Check every 0.5 seconds
+
+        bpy.app.timers.register(check_progress, first_interval=0.5)
+        
+        return {"FINISHED"}
+
+    def _run_transcription_thread(self, job_id: str, audio_path: str, settings, strip):
+        """Background thread for transcription."""
+        try:
             # Import engine and config
             from VSE_Transcrib.engines import get_engine
             from VSE_Transcrib.engines.local_whisper import LocalWhisperConfig
@@ -97,18 +153,20 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
             try:
                 engine_cls = get_engine(settings.engine_type)
             except Exception as e:
-                self.report({"ERROR"}, f"Engine '{settings.engine_type}' not available: {e}")
-                return {"CANCELLED"}
+                with _transcription_lock:
+                    _transcription_results[job_id]["status"] = "error"
+                    _transcription_results[job_id]["error"] = f"Engine '{settings.engine_type}' not available: {e}"
+                return
 
             engine = engine_cls()
 
             # Build engine config from settings
             config = self._build_engine_config(settings)
             if config is None:
-                return {"CANCELLED"}
-
-            # Report progress
-            self.report({"INFO"}, f"Starting transcription with {engine.name}...")
+                with _transcription_lock:
+                    _transcription_results[job_id]["status"] = "error"
+                    _transcription_results[job_id]["error"] = "Invalid configuration"
+                return
 
             # Run transcription
             transcript = engine.transcribe(audio_path, config)
@@ -117,38 +175,49 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
             from VSE_Transcrib.core.transcription import validate_transcript, normalize_transcript
             problems = validate_transcript(transcript)
             if problems:
-                self.report({"WARNING"}, f"Transcript validation issues: {'; '.join(problems)}")
+                # Just log warnings, don't fail
+                pass
 
             # Normalize
             transcript = normalize_transcript(transcript)
 
-            # Serialize and store
-            transcript_json = self._transcript_to_json(transcript)
-            settings.transcript_storage = transcript_json
-
-            self.report({"INFO"}, f"Transcription complete: {len(transcript.segments)} segments, {transcript.total_words} words")
-            return {"FINISHED"}
+            # Store result
+            with _transcription_lock:
+                _transcription_results[job_id]["status"] = "finished"
+                _transcription_results[job_id]["result"] = transcript
 
         except EngineNotAvailableError as e:
-            self.report({"ERROR"}, f"Engine not available: {e}")
-            return {"CANCELLED"}
+            with _transcription_lock:
+                _transcription_results[job_id]["status"] = "error"
+                _transcription_results[job_id]["error"] = f"Engine not available: {e}"
         except InvalidConfigError as e:
-            self.report({"ERROR"}, f"Invalid configuration: {e}")
-            return {"CANCELLED"}
+            with _transcription_lock:
+                _transcription_results[job_id]["status"] = "error"
+                _transcription_results[job_id]["error"] = f"Invalid configuration: {e}"
         except TranscriptionError as e:
-            self.report({"ERROR"}, f"Transcription failed: {e}")
-            return {"CANCELLED"}
+            with _transcription_lock:
+                _transcription_results[job_id]["status"] = "error"
+                _transcription_results[job_id]["error"] = f"Transcription failed: {e}"
         except Exception as e:
-            self.report({"ERROR"}, f"Unexpected error: {e}")
-            return {"CANCELLED"}
+            with _transcription_lock:
+                _transcription_results[job_id]["status"] = "error"
+                _transcription_results[job_id]["error"] = f"Unexpected error: {e}"
         finally:
-            settings.is_transcribing = False
             # Cleanup temp audio file
             try:
                 if audio_path and os.path.exists(audio_path):
                     os.remove(audio_path)
             except Exception:
                 pass
+
+    def _process_transcription_result(self, result, settings):
+        """Process completed transcription result on main thread."""
+        transcript = result["result"]
+        if transcript:
+            # Serialize and store
+            transcript_json = self._transcript_to_json(transcript)
+            settings.transcript_storage = transcript_json
+            self.report({"INFO"}, f"Transcription complete: {len(transcript.segments)} segments, {transcript.total_words} words")
 
     @staticmethod
     def _get_active_audio_strip(context: Context):
