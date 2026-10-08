@@ -21,10 +21,11 @@ try:
 except ImportError:
     pass
 
-try:
-    from . import external_api  # noqa: F401
-except ImportError:
-    pass
+# External API engine removed per Whisper-only requirement
+# try:
+#     from . import external_api  # noqa: F401
+# except ImportError:
+#     pass
 
 __all__ = [
     "EngineConfig",
