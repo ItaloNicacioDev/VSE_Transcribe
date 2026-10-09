@@ -94,7 +94,8 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
         import uuid
         job_id = str(uuid.uuid4())[:8]
         
-        # Store job info for async processing
+        self._current_job_id = job_id
+        self._current_settings = settings
         with _transcription_lock:
             _transcription_results[job_id] = {
                 "status": "started",
