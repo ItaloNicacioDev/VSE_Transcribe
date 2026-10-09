@@ -1,4 +1,4 @@
-""""Download Whisper model operator."""
+"""Download Whisper model operator."""
 
 from __future__ import annotations
 
