@@ -1,0 +1,1 @@
+from .create_subtitles import VSETRANSCRIBE_OT_create_subtitles as VSETRANSCRIBE_OT_generate_subtitles
