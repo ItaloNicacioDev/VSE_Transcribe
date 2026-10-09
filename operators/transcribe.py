@@ -5,6 +5,7 @@ Runs transcription using the selected engine and stores the result.
 
 from __future__ import annotations
 
+import functools
 import json
 import os
 import tempfile
@@ -34,6 +35,135 @@ except ImportError:
 # Global storage for async transcription results
 _transcription_results = {}
 _transcription_lock = threading.Lock()
+
+
+def _transcript_to_json(transcript) -> str:
+    """Serialize Transcript to JSON."""
+    data = {
+        "language": transcript.language,
+        "duration": transcript.duration,
+        "metadata": transcript.metadata,
+        "segments": [],
+    }
+    for seg in transcript.segments:
+        data["segments"].append({
+            "start": seg.start,
+            "end": seg.end,
+            "text": seg.text,
+            "words": [
+                {"text": w.text, "start": w.start, "end": w.end, "confidence": w.confidence}
+                for w in seg.words
+            ],
+        })
+    return json.dumps(data, ensure_ascii=False)
+
+
+def _set_job(job_id: str, **fields) -> None:
+    with _transcription_lock:
+        if job_id in _transcription_results:
+            _transcription_results[job_id].update(fields)
+
+
+def _run_transcription_thread(job_id: str, audio_path: str, config) -> None:
+    """Background thread: touches NO bpy data."""
+    try:
+        from VSE_Transcrib.engines.local_whisper import LocalWhisperEngine
+        from VSE_Transcrib.core.transcription import validate_transcript, normalize_transcript
+
+        def on_progress(progress: float, word: str = "") -> None:
+            _set_job(job_id, progress=progress, current_word=word)
+
+        engine = LocalWhisperEngine()
+        transcript = engine.transcribe(audio_path, config, progress_callback=on_progress)
+        validate_transcript(transcript)  # warnings only
+        transcript = normalize_transcript(transcript)
+        _set_job(job_id, status="finished", result=transcript)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        _set_job(job_id, status="error", error=f"{type(e).__name__}: {e}")
+    finally:
+        try:
+            if audio_path and os.path.exists(audio_path):
+                os.remove(audio_path)
+        except Exception:
+            pass
+
+
+def _poll_job(job_id: str):
+    """Main-thread timer: updates UI props and finalizes the job."""
+    with _transcription_lock:
+        data = _transcription_results.get(job_id)
+        if data is None:
+            return None
+        snapshot = dict(data)
+
+    scene = bpy.data.scenes.get(snapshot["scene_name"])
+    settings = getattr(scene, "vse_transcribe", None) if scene else None
+    if settings is None:
+        with _transcription_lock:
+            _transcription_results.pop(job_id, None)
+        return None
+
+    status = snapshot["status"]
+    if status in {"started", "running"}:
+        settings.is_transcribing = True
+        settings.transcription_progress = snapshot["progress"]
+        settings.last_word = snapshot["current_word"]
+        return 0.2
+
+    settings.is_transcribing = False
+    with _transcription_lock:
+        _transcription_results.pop(job_id, None)
+
+    if status == "error":
+        print(f"[VSE_Transcribe] Transcription failed: {snapshot['error']}")
+        settings.status_text = f"Error: {snapshot['error']}"
+        return None
+
+    _finalize_transcript(scene, settings, snapshot["result"])
+    return None
+
+
+def _finalize_transcript(scene, settings, transcript) -> None:
+    """Store transcript and auto-create subtitle strips (main thread)."""
+    if not transcript or transcript.is_empty:
+        settings.status_text = "No speech detected"
+        print("[VSE_Transcribe] No transcript result received")
+        return
+
+    settings.transcript_storage = _transcript_to_json(transcript)
+    settings.transcription_progress = 1.0
+
+    try:
+        from VSE_Transcrib.core.subtitle_engine import SubtitleConfig, prepare_subtitles
+        from VSE_Transcrib.core.strip_manager import StripManager
+
+        blocks = prepare_subtitles(transcript, SubtitleConfig(
+            max_chars_per_line=settings.subtitle.max_chars_per_line,
+            max_lines=settings.subtitle.max_lines,
+            min_duration=settings.subtitle.min_duration,
+            gap_threshold=settings.subtitle.gap_threshold,
+        ))
+        if not blocks:
+            settings.status_text = "No subtitle blocks generated"
+            return
+
+        if not scene.sequence_editor:
+            scene.sequence_editor_create()
+
+        channel = 5
+        strips = StripManager(scene, scene.sequence_editor).create_subtitle_strips(blocks, channel)
+
+        settings.generated_strips.clear()
+        for strip in strips:
+            settings.generated_strips.add().name = strip.name
+        settings.status_text = f"Created {len(strips)} subtitle strips on channel {channel}"
+        print(f"[VSE_Transcribe] {settings.status_text}")
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        settings.status_text = f"Failed to generate subtitle strips: {e}"
 
 
 class VSETRANSCRIBE_OT_transcribe(Operator):
@@ -90,203 +220,40 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
                 self.report({"ERROR"}, "Failed to extract audio from strip (no sequence editor)")
             return {"CANCELLED"}
 
-        # Generate unique job ID
+        # Build engine config on the MAIN thread (bpy properties are not thread-safe)
+        config = self._build_engine_config(settings)
+
         import uuid
         job_id = str(uuid.uuid4())[:8]
-        
-        self._current_job_id = job_id
-        self._current_settings = settings
-        self._current_context = context
+
         with _transcription_lock:
             _transcription_results[job_id] = {
                 "status": "started",
-                "audio_path": audio_path,
-                "settings": settings,
-                "context": context,
+                "scene_name": context.scene.name,
                 "result": None,
                 "error": None,
                 "start_time": time.time(),
-                "transcript_duration": 0.0,
-                "word_list": [],
                 "progress": 0.0,
                 "current_word": "",
-                "last_update": time.time(),
             }
 
-        # Mark as transcribing
         settings.is_transcribing = True
         settings.transcription_job_id = job_id
-        settings.transcription_icon_index = 0  # reset animation icon
+        settings.transcription_icon_index = 0
+        settings.transcription_progress = 0.0
         self.report({"INFO"}, f"Starting transcription (job: {job_id})...")
 
-        # Start background thread
         thread = threading.Thread(
-            target=self._run_transcription_thread,
-            args=(job_id, audio_path, settings, context),
-            daemon=True
+            target=_run_transcription_thread,
+            args=(job_id, audio_path, config),
+            daemon=True,
         )
         thread.start()
-        # Register timer to update UI
-        bpy.app.timers.register(self._check_progress)
 
-        # No local timer function; _check_progress will be called continuously until finished
-        
+        # Module-level timer: does NOT depend on this operator instance (freed after execute)
+        bpy.app.timers.register(functools.partial(_poll_job, job_id), first_interval=0.2)
         return {"FINISHED"}
 
-    def _check_progress(self):
-        """Periodic callback that updates UI bars and finalizes job."""
-        with _transcription_lock:
-            data = _transcription_results.get(self._current_job_id)
-            if not data:
-                return None
-            # UI updates
-            self._current_settings.is_transcribing = True
-            self._current_settings.transcription_progress = data.get("progress", 0.0)
-            self._current_settings.last_word = data.get("current_word", "")
-            if data.get("status") == "finished":
-                # forward to main thread for final processing
-                self._process_transcription_result(data, self._current_settings, self._current_context)
-                self._current_settings.is_transcribing = False
-                del _transcription_results[self._current_job_id]
-                return None
-            if data.get("status") == "error":
-                self.report({"ERROR"}, f"Transcription failed: {data.get('error','unknown')}")
-                self._current_settings.is_transcribing = False
-                del _transcription_results[self._current_job_id]
-                return None
-        return 0.1
-
-    def _transcription_progress_callback(self, job_id: str, progress: float, current_word: str = ""):
-        """Callback for transcription progress updates."""
-        with _transcription_lock:
-            if job_id in _transcription_results:
-                _transcription_results[job_id]["progress"] = progress
-                _transcription_results[job_id]["current_word"] = current_word
-                _transcription_results[job_id]["last_update"] = time.time()
-
-    def _run_transcription_thread(self, job_id: str, audio_path: str, settings, strip):
-        """Background thread for transcription."""
-        try:
-            # Import engine and config
-            from VSE_Transcrib.engines.local_whisper import LocalWhisperEngine, LocalWhisperConfig
-            from VSE_Transcrib.engines.base import EngineNotAvailableError, InvalidConfigError, TranscriptionError
-
-            engine = LocalWhisperEngine()
-
-            # Build engine config from settings
-            config = self._build_engine_config(settings)
-            if config is None:
-                with _transcription_lock:
-                    _transcription_results[job_id]["status"] = "error"
-                    _transcription_results[job_id]["error"] = "Invalid configuration"
-                return
-
-            # Run transcription with progress callback if supported
-            transcript = engine.transcribe(audio_path, config, progress_callback=self._transcription_progress_callback)
-
-            # Validate transcript
-            from VSE_Transcrib.core.transcription import validate_transcript, normalize_transcript
-            problems = validate_transcript(transcript)
-            if problems:
-                # Just log warnings, don't fail
-                pass
-
-            # Normalize
-            transcript = normalize_transcript(transcript)
-
-            # Store result
-            with _transcription_lock:
-                if job_id in _transcription_results:
-                    _transcription_results[job_id]["status"] = "finished"
-                    _transcription_results[job_id]["result"] = transcript
-
-        except EngineNotAvailableError as e:
-            with _transcription_lock:
-                if job_id in _transcription_results:
-                    _transcription_results[job_id]["status"] = "error"
-                    _transcription_results[job_id]["error"] = f"Local Whisper engine not available: {e}"
-            return
-        except InvalidConfigError as e:
-            with _transcription_lock:
-                if job_id in _transcription_results:
-                    _transcription_results[job_id]["status"] = "error"
-                    _transcription_results[job_id]["error"] = f"Invalid configuration: {e}"
-            return
-        except TranscriptionError as e:
-            with _transcription_lock:
-                if job_id in _transcription_results:
-                    _transcription_results[job_id]["status"] = "error"
-                    _transcription_results[job_id]["error"] = f"Transcription failed: {e}"
-            return
-        except Exception as e:
-            # Catch any other unexpected errors
-            with _transcription_lock:
-                if job_id in _transcription_results:
-                    _transcription_results[job_id]["status"] = "error"
-                    _transcription_results[job_id]["error"] = f"Unexpected error: {e}"
-            return
-        finally:
-            # Cleanup temp audio file
-            try:
-                if audio_path and os.path.exists(audio_path):
-                    os.remove(audio_path)
-            except Exception:
-                pass
-
-    @classmethod
-    def _process_transcription_result(cls, result, settings, context):
-        """Process completed transcription result on main thread."""
-        cls._report_info(context, f"[_process_transcription_result] Called with result status: {result.get('status', 'unknown')}")
-        transcript = result["result"]
-        if not transcript:
-            cls._report_warning(context, "No transcript result received")
-            return
-            # Serialize and store
-            transcript_json = cls._transcript_to_json(transcript)
-            settings.transcript_storage = transcript_json
-            cls._report_info(context, f"Transcription complete: {len(transcript.segments)} segments, {transcript.total_words} words")
-            
-            # Auto-generate subtitle strips
-            try:
-                # Prepare subtitle config from settings
-                from VSE_Transcrib.core.subtitle_engine import SubtitleConfig, prepare_subtitles
-                subtitle_config = SubtitleConfig(
-                    max_chars_per_line=settings.subtitle.max_chars_per_line,
-                    max_lines=settings.subtitle.max_lines,
-                    min_duration=settings.subtitle.min_duration,
-                    gap_threshold=settings.subtitle.gap_threshold,
-                )
-                
-                # Generate subtitle blocks
-                blocks = prepare_subtitles(transcript, subtitle_config)
-                
-                if blocks:
-                    # Get or create sequence editor
-                    scene = context.scene
-                    if not scene.sequence_editor:
-                        scene.sequence_editor_create()
-                    
-                    sequencer = scene.sequence_editor
-                    
-                    # Create strips via StripManager
-                    from VSE_Transcrib.core.strip_manager import StripManager
-                    manager = StripManager(scene, sequencer)
-                    # Use a reasonable default channel (e.g., channel 5 for subtitles)
-                    channel = 5
-                    strips = manager.create_subtitle_strips(blocks, channel)
-                    
-                    # Store strip names for clearing later
-                    settings.generated_strips.clear()
-                    for strip in strips:
-                        item = settings.generated_strips.add()
-                        item.name = strip.name
-                    
-                    cls._report_info(context, f"Created {len(strips)} subtitle strips on channel {channel}")
-                else:
-                    cls._report_warning(context, "No subtitle blocks generated from transcript")
-            except Exception as e:
-                cls._report_error(context, f"Failed to generate subtitle strips: {e}")
-    
     @staticmethod
     def _report_info(context, message):
         if hasattr(context, 'window_manager'):
@@ -382,32 +349,7 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
 
     def _transcript_to_json(self, transcript: "Transcript") -> str:
         """Serialize Transcript to JSON."""
-        from VSE_Transcrib.models.transcript import TranscriptSegment, TranscriptWord
-
-        data = {
-            "language": transcript.language,
-            "duration": transcript.duration,
-            "metadata": transcript.metadata,
-            "segments": [],
-        }
-
-        for seg in transcript.segments:
-            seg_data = {
-                "start": seg.start,
-                "end": seg.end,
-                "text": seg.text,
-                "words": [],
-            }
-            for word in seg.words:
-                seg_data["words"].append({
-                    "text": word.text,
-                    "start": word.start,
-                    "end": word.end,
-                    "confidence": word.confidence,
-                })
-            data["segments"].append(seg_data)
-
-        return json.dumps(data, ensure_ascii=False)
+        return _transcript_to_json(transcript)
 
 
 # Registration handled by __init__.py
