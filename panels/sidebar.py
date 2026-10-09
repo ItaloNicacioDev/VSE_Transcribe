@@ -27,7 +27,7 @@ class VSETRANSCRIBE_PT_sidebar(Panel):
 
     bl_label = "VSE_Transcribe"
     bl_idname = "VSETRANSCRIBE_PT_sidebar"
-    bl_space_type = "SEQUENCE"
+    bl_space_type = "SEQUENCE_EDITOR"
     bl_region_type = "UI"
     bl_category = "VSE Transcribe"
 
