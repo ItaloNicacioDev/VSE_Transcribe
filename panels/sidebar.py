@@ -137,7 +137,7 @@ class VSETRANSCRIBE_PT_sidebar(Panel):
         
         row = col.row(align=True)
         row.scale_x = 2.0
-        row.operator("vse_transcribe.generate_subtitles", text="Create Subtitle Strips", icon="PLUS")
+        row.operator("vse_transcribe.create_subtitles", text="Create Subtitle Strips", icon="PLUS")
         
         row = col.row(align=True)
         row.scale_x = 2.0
