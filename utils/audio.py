@@ -111,6 +111,42 @@ def _get_available_audio_codec(scene, container: str) -> str:
     return "PCM"  # Default fallback
 
 
+_SCENE_ATTRS = ("frame_start", "frame_end", "frame_current")
+_RENDER_ATTRS = (
+    "filepath", "resolution_x", "resolution_y", "resolution_percentage",
+    "use_file_extension", "film_transparent",
+)
+_FFMPEG_ATTRS = (
+    "format", "codec", "audio_codec", "audio_bitrate", "audio_mixrate", "audio_channels",
+)
+
+
+def _snapshot_scene_state(scene) -> list:
+    """Save every scene/render setting this module may touch."""
+    r = scene.render
+    targets = [(scene, n) for n in _SCENE_ATTRS]
+    targets += [(r, n) for n in _RENDER_ATTRS]
+    targets += [(r.image_settings, "file_format")]
+    targets += [(r.ffmpeg, n) for n in _FFMPEG_ATTRS]
+    saved = []
+    for obj, name in targets:
+        try:
+            saved.append((obj, name, getattr(obj, name)))
+        except Exception:
+            pass
+    return saved
+
+
+def _restore_scene_state(saved: list) -> None:
+    """Restore settings captured by _snapshot_scene_state (two passes: frame range order)."""
+    for _ in range(2):
+        for obj, name, value in saved:
+            try:
+                setattr(obj, name, value)
+            except Exception:
+                pass
+
+
 def _mixdown_audio(
     scene: "Scene",
     seq_editor,
@@ -120,101 +156,68 @@ def _mixdown_audio(
 ) -> tuple[bool, str]:
     """Extract audio using Blender's sound.mixdown (much faster than render).
 
+    Scene settings are always restored afterwards.
     Returns (success: bool, error_message: str)
     """
     try:
-        # Validate strips have audio
         audio_strips = [s for s in strips if s.type in {"SOUND", "MOVIE"}]
         if not audio_strips:
             return False, "No audio strips found (need SOUND or MOVIE type)"
 
-        # Validate each strip has audio data
         for s in audio_strips:
             valid, msg = _validate_strip_has_audio(s)
             if not valid:
                 return False, msg
 
-        # Determine frame range
         frame_start = min(int(s.frame_final_start) for s in strips)
         frame_end = max(int(s.frame_final_end) for s in strips)
-
         if frame_start >= frame_end:
             return False, f"Invalid frame range: {frame_start} >= {frame_end}"
 
-        # Mute non-target strips
         original_mutes = {}
         for seq in _get_sequences(seq_editor):
             original_mutes[seq] = seq.mute
             seq.mute = seq not in strips
 
+        saved = _snapshot_scene_state(scene)
         try:
-            # Get available container/codec for this Blender version
-            container = _get_available_ffmpeg_format(scene)
-            audio_codec = _get_available_audio_codec(scene, container)
-
-            print(f"[VSE_Transcribe] Using container={container}, audio_codec={audio_codec}")
-
-            # Configure render settings for audio mixdown
-            original_filepath = scene.render.filepath
-            original_format = scene.render.image_settings.file_format
-            original_ffmpeg_format = getattr(scene.render.ffmpeg, "format", None)
-            original_audio_codec = getattr(scene.render.ffmpeg, "audio_codec", None)
-            original_audio_bitrate = getattr(scene.render.ffmpeg, "audio_bitrate", None)
-            original_audio_samplerate = getattr(scene.render.ffmpeg, "audio_sample_rate", None)
-            if original_audio_samplerate is None:
-                original_audio_samplerate = getattr(scene.render.ffmpeg, "audio_samplerate", None)
-
-            # Configure for audio mixdown
-            scene.render.filepath = output_path
-            scene.render.image_settings.file_format = "FFMPEG"
-            scene.render.ffmpeg.format = container
-            scene.render.ffmpeg.audio_codec = audio_codec
-            scene.render.ffmpeg.audio_bitrate = 128
-
-            # Sample rate
-            if hasattr(scene.render.ffmpeg, "audio_sample_rate"):
-                scene.render.ffmpeg.audio_sample_rate = sample_rate
-            elif hasattr(scene.render.ffmpeg, "audio_samplerate"):
-                scene.render.ffmpeg.audio_samplerate = sample_rate
-
-            # Frame range
-            original_frame_start = scene.frame_start
-            original_frame_end = scene.frame_end
+            # mixdown uses the scene frame range and ffmpeg mixrate/channels
             scene.frame_start = frame_start
-            scene.frame_end = frame_end
+            scene.frame_end = max(frame_start, frame_end - 1)
+            try:
+                scene.render.ffmpeg.audio_mixrate = sample_rate
+                scene.render.ffmpeg.audio_channels = "MONO"
+            except Exception:
+                pass  # not fatal: Whisper resamples anyway
 
-            # Ensure output directory exists
             os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
 
-            # Use sound.mixdown - much faster than render.render
-                        # Note: Don't pass container/codec to mixdown - let it use scene render settings
-                        # Frame range is set via scene.frame_start/scene.frame_end
-                        try:
-                            bpy.ops.sound.mixdown(
-                                filepath=output_path,
-                            )
-                        except Exception as e:
-                            return False, f"sound.mixdown failed: {e}"
+            try:
+                bpy.ops.sound.mixdown(
+                    filepath=output_path,
+                    check_existing=False,
+                    relative_path=False,
+                    container="WAV",
+                    codec="PCM",
+                    format="S16",
+                )
+            except Exception as e:
+                return False, f"sound.mixdown failed: {e}"
 
-            # Verify output
             if not os.path.exists(output_path):
                 return False, "Output file was not created"
-
             if os.path.getsize(output_path) == 0:
                 return False, "Output file is empty (0 bytes)"
-
             return True, "Success"
-
         finally:
-            # Restore strip mute states
+            _restore_scene_state(saved)
             for seq, mute in original_mutes.items():
-                if seq:
+                try:
                     seq.mute = mute
-
+                except Exception:
+                    pass
     except Exception as e:
         return False, f"Unexpected error in _mixdown_audio: {e}"
-
-    return False, "Unknown error"
 
 
 def _render_audio_fallback(
@@ -225,90 +228,59 @@ def _render_audio_fallback(
     strips: list["Sequence"],
 ) -> tuple[bool, str]:
     """Fallback audio extraction using render.render(animation=True).
-    
-    Configures for audio-only output. Returns (success: bool, error_message: str)
+
+    NOTE: temporarily shrinks the render resolution; it is ALWAYS restored.
     """
     try:
-        # Mute non-target strips
         original_mutes = {}
         for seq in _get_sequences(seq_editor):
             original_mutes[seq] = seq.mute
             seq.mute = seq not in strips
-        
+
+        saved = _snapshot_scene_state(scene)
         try:
-            # Determine frame range
             frame_start = min(int(s.frame_final_start) for s in strips)
             frame_end = max(int(s.frame_final_end) for s in strips)
-            
             if frame_start >= frame_end:
                 return False, f"Invalid frame range: {frame_start} >= {frame_end}"
-            
-            # Get available container/codec
+
             container = _get_available_ffmpeg_format(scene)
             audio_codec = _get_available_audio_codec(scene, container)
-            
-            print(f"[VSE_Transcribe] Fallback: Using container={container}, audio_codec={audio_codec}")
-            
-            # Configure render settings
-            original_filepath = scene.render.filepath
-            original_format = scene.render.image_settings.file_format
-            original_ffmpeg_format = getattr(scene.render.ffmpeg, "format", None)
-            original_audio_codec = getattr(scene.render.ffmpeg, "audio_codec", None)
-            original_audio_bitrate = getattr(scene.render.ffmpeg, "audio_bitrate", None)
-            original_audio_samplerate = getattr(scene.render.ffmpeg, "audio_sample_rate", None)
-            if original_audio_samplerate is None:
-                original_audio_samplerate = getattr(scene.render.ffmpeg, "audio_samplerate", None)
-            
-            original_frame_start = scene.frame_start
-            original_frame_end = scene.frame_end
-            
-            # Configure for audio-only render
+
             scene.render.filepath = output_path
             scene.render.image_settings.file_format = "FFMPEG"
             scene.render.ffmpeg.format = container
             scene.render.ffmpeg.audio_codec = audio_codec
             scene.render.ffmpeg.audio_bitrate = 128
-            
-            if hasattr(scene.render.ffmpeg, "audio_sample_rate"):
-                scene.render.ffmpeg.audio_sample_rate = sample_rate
-            elif hasattr(scene.render.ffmpeg, "audio_samplerate"):
-                scene.render.ffmpeg.audio_samplerate = sample_rate
-            
-            # Disable video rendering - only audio
+            try:
+                scene.render.ffmpeg.audio_mixrate = sample_rate
+            except Exception:
+                pass
+
             scene.render.use_file_extension = False
-            scene.render.film_transparent = True
-            scene.render.resolution_x = 16  # Minimal
-            scene.render.resolution_y = 16  # Minimal
+            scene.render.resolution_x = 16
+            scene.render.resolution_y = 16
             scene.render.resolution_percentage = 100
-            
             scene.frame_start = frame_start
-            scene.frame_end = frame_end
-            
-            # Ensure output directory exists
+            scene.frame_end = max(frame_start, frame_end - 1)
+
             os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-            
-            # Render animation (audio only since no video strips selected/muted)
             bpy.ops.render.render(animation=True, write_still=False)
-            
-            # Verify output
+
             if not os.path.exists(output_path):
                 return False, "Output file was not created by render"
-            
             if os.path.getsize(output_path) == 0:
                 return False, "Output file is empty (0 bytes)"
-            
             return True, "Success (fallback render)"
-            
         finally:
-            # Restore strip mute states
+            _restore_scene_state(saved)
             for seq, mute in original_mutes.items():
-                if seq:
+                try:
                     seq.mute = mute
-                   
+                except Exception:
+                    pass
     except Exception as e:
         return False, f"Render fallback failed: {e}"
-    
-    return False, "Unknown error in render fallback"
 
 
 def extract_audio_from_strip(
