@@ -44,3 +44,6 @@ operators/__pycache__/browse_audio.cpython-314.pyc
 operators/__pycache__/cancel_transcription.cpython-314.pyc
 operators/__pycache__/create_subtitles.cpython-314.pyc
 operators/__pycache__/download_model.cpython-314.pyc
+
+
+consulta.sql
