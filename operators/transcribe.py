@@ -96,6 +96,7 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
         
         self._current_job_id = job_id
         self._current_settings = settings
+        self._current_context = context
         with _transcription_lock:
             _transcription_results[job_id] = {
                 "status": "started",
@@ -131,6 +132,29 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
         # No local timer function; _check_progress will be called continuously until finished
         
         return {"FINISHED"}
+
+    def _check_progress(self):
+        """Periodic callback that updates UI bars and finalizes job."""
+        with _transcription_lock:
+            data = _transcription_results.get(self._current_job_id)
+            if not data:
+                return None
+            # UI updates
+            self._current_settings.is_transcribing = True
+            self._current_settings.transcription_progress = data.get("progress", 0.0)
+            self._current_settings.last_word = data.get("current_word", "")
+            if data.get("status") == "finished":
+                # forward to main thread for final processing
+                self._process_transcription_result(data, self._current_settings, self._current_context)
+                self._current_settings.is_transcribing = False
+                del _transcription_results[self._current_job_id]
+                return None
+            if data.get("status") == "error":
+                self.report({"ERROR"}, f"Transcription failed: {data.get('error','unknown')}")
+                self._current_settings.is_transcribing = False
+                del _transcription_results[self._current_job_id]
+                return None
+        return 0.1
 
     def _transcription_progress_callback(self, job_id: str, progress: float, current_word: str = ""):
         """Callback for transcription progress updates."""
