@@ -126,7 +126,7 @@ class LocalWhisperEngine(TranscriptionEngine):
             self._model_cache[cache_key] = WhisperModel(model_size, device=device, compute_type=compute_type, download_root=model_dir)
         return self._model_cache[cache_key]
 
-    def transcribe(self, audio_path: str, config: EngineConfig) -> Transcript:
+    def transcribe(self, audio_path: str, config: EngineConfig, progress_callback=None) -> Transcript:
         """Transcribe audio using faster-whisper (preferred) or whisper."""
         if not isinstance(config, LocalWhisperConfig):
             raise TypeError(f"Expected LocalWhisperConfig, got {type(config).__name__}")
@@ -138,29 +138,28 @@ class LocalWhisperEngine(TranscriptionEngine):
                 "Install with: pip install faster-whisper"
             )
 
+        errors = []
+
         # Try faster-whisper first (faster, lower memory)
         try:
-            return self._transcribe_faster_whisper(audio_path, config)
-        except EngineNotAvailableError:
-            pass
+            return self._transcribe_faster_whisper(audio_path, config, progress_callback)
+        except EngineNotAvailableError as e:
+            errors.append(f"faster-whisper unavailable: {e}")
         except Exception as e:
-            # If faster-whisper fails for other reasons, try whisper
-            pass
+            errors.append(f"faster-whisper failed: {type(e).__name__}: {e}")
 
         # Fallback to original whisper
         try:
             return self._transcribe_whisper(audio_path, config)
-        except EngineNotAvailableError:
-            pass
-        except Exception:
-            pass
+        except EngineNotAvailableError as e:
+            errors.append(f"whisper unavailable: {e}")
+        except Exception as e:
+            errors.append(f"whisper failed: {type(e).__name__}: {e}")
 
-        raise EngineNotAvailableError(
-            "Neither faster-whisper nor whisper is available at runtime."
-        )
+        raise EngineNotAvailableError(" | ".join(errors))
 
     def _transcribe_faster_whisper(
-        self, audio_path: str, config: LocalWhisperConfig
+        self, audio_path: str, config: LocalWhisperConfig, progress_callback=None
     ) -> Transcript:
         """Transcribe using faster-whisper."""
         WhisperModel = self._get_faster_whisper()
@@ -181,6 +180,18 @@ class LocalWhisperEngine(TranscriptionEngine):
             language=config.language,
             word_timestamps=config.word_timestamps,
         )
+
+        if progress_callback is not None:
+            total = float(getattr(info, "duration", 0.0) or 0.0)
+            raw_segments = segments
+
+            def _reporting(gen):
+                for seg in gen:
+                    if total > 0:
+                        progress_callback(min(1.0, seg.end / total), (seg.text or "").strip()[-40:])
+                    yield seg
+
+            segments = _reporting(raw_segments)
 
         # Convert to our Transcript format
         return self._convert_faster_whisper_result(segments, info, config)
