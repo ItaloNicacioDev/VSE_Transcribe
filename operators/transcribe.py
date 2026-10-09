@@ -125,6 +125,8 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
             daemon=True
         )
         thread.start()
+        # Register timer to update UI
+        bpy.app.timers.register(self._check_progress)
 
         # Register timer to check progress
         def check_progress():
