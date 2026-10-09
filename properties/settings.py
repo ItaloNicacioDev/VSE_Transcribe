@@ -171,7 +171,7 @@ class VSETranscribeSettings(PropertyGroup):
         description="When enabled, transcribes the selected sound/movie strip from the VSE.",
         default=True,
     )
-+    # Audio source
+    # Audio source
     audio_source: StringProperty(
         name="Audio Source",
         description="Path to audio file or name of sound strip",
