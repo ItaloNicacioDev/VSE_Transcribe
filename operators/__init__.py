@@ -9,6 +9,7 @@ from .export_subtitles import VSETRANSCRIBE_OT_export_subtitles
 from .download_model import VSETRANSCRIBE_OT_download_model
 from .browse_audio import VSETRANSCRIBE_OT_browse_audio
 from .cancel_transcription import VSETRANSCRIBE_OT_cancel_transcription
+from .generate_subtitles import VSETRANSCRIBE_OT_generate_subtitles
 
 __all__ = [
     "VSETRANSCRIBE_OT_transcribe",
