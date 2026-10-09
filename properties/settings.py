@@ -165,7 +165,13 @@ class VSETranscribeSettings(PropertyGroup):
     # Subtitle generation settings
     subtitle: PointerProperty(type=SubtitleProps)
 
-    # Audio source
+    # Use VSE strip
+    use_vse_strip: BoolProperty(
+        name="Use VSE Strip",
+        description="When enabled, transcribes the selected sound/movie strip from the VSE.",
+        default=True,
+    )
++    # Audio source
     audio_source: StringProperty(
         name="Audio Source",
         description="Path to audio file or name of sound strip",
