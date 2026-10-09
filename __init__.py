@@ -54,18 +54,17 @@ __version__ = "0.1.13"
 # Registration
 # -----------------------------------------------------------------------------
 
-CLASSES = (
-    # Operators
-    operators.VSETRANSCRIBE_OT_transcribe,
+CLASSES = (    operators.VSETRANSCRIBE_OT_transcribe,
     operators.VSETRANSCRIBE_OT_create_subtitles,
     operators.VSETRANSCRIBE_OT_clear_subtitles,
     operators.VSETRANSCRIBE_OT_export_subtitles,
-
-    # Panels
-    panels.VSETRANSCRIBE_PT_sidebar,
     operators.VSETRANSCRIBE_OT_download_model,
     operators.VSETRANSCRIBE_OT_browse_audio,
     operators.VSETRANSCRIBE_OT_cancel_transcription,
+
+    # Panels
+    panels.VSETRANSCRIBE_PT_sidebar,
+
 )
 
 
