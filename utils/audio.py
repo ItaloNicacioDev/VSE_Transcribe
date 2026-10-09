@@ -119,7 +119,7 @@ def _mixdown_audio(
     strips: list["Sequence"],
 ) -> tuple[bool, str]:
     """Extract audio using Blender's sound.mixdown (much faster than render).
-    
+
     Returns (success: bool, error_message: str)
     """
     try:
@@ -127,33 +127,33 @@ def _mixdown_audio(
         audio_strips = [s for s in strips if s.type in {"SOUND", "MOVIE"}]
         if not audio_strips:
             return False, "No audio strips found (need SOUND or MOVIE type)"
-        
+
         # Validate each strip has audio data
         for s in audio_strips:
             valid, msg = _validate_strip_has_audio(s)
             if not valid:
                 return False, msg
-        
+
         # Determine frame range
         frame_start = min(int(s.frame_final_start) for s in strips)
         frame_end = max(int(s.frame_final_end) for s in strips)
-        
+
         if frame_start >= frame_end:
             return False, f"Invalid frame range: {frame_start} >= {frame_end}"
-        
+
         # Mute non-target strips
         original_mutes = {}
         for seq in _get_sequences(seq_editor):
             original_mutes[seq] = seq.mute
             seq.mute = seq not in strips
-        
+
         try:
             # Get available container/codec for this Blender version
             container = _get_available_ffmpeg_format(scene)
             audio_codec = _get_available_audio_codec(scene, container)
-            
+
             print(f"[VSE_Transcribe] Using container={container}, audio_codec={audio_codec}")
-            
+
             # Configure render settings for audio mixdown
             original_filepath = scene.render.filepath
             original_format = scene.render.image_settings.file_format
@@ -163,20 +163,20 @@ def _mixdown_audio(
             original_audio_samplerate = getattr(scene.render.ffmpeg, "audio_sample_rate", None)
             if original_audio_samplerate is None:
                 original_audio_samplerate = getattr(scene.render.ffmpeg, "audio_samplerate", None)
-            
+
             # Configure for audio mixdown
             scene.render.filepath = output_path
             scene.render.image_settings.file_format = "FFMPEG"
             scene.render.ffmpeg.format = container
             scene.render.ffmpeg.audio_codec = audio_codec
             scene.render.ffmpeg.audio_bitrate = 128
-            
+
             # Sample rate
             if hasattr(scene.render.ffmpeg, "audio_sample_rate"):
                 scene.render.ffmpeg.audio_sample_rate = sample_rate
             elif hasattr(scene.render.ffmpeg, "audio_samplerate"):
                 scene.render.ffmpeg.audio_samplerate = sample_rate
-            
+
             # Frame range
             original_frame_start = scene.frame_start
             original_frame_end = scene.frame_end
@@ -191,31 +191,30 @@ def _mixdown_audio(
             try:
                 bpy.ops.sound.mixdown(
                     filepath=output_path,
-                    mix_buffer_size=1024,
                     start_frame=frame_start,
                     end_frame=frame_end,
                 )
             except Exception as e:
                 return False, f"sound.mixdown failed: {e}"
-            
-                        # Verify output
+
+            # Verify output
             if not os.path.exists(output_path):
                 return False, "Output file was not created"
-            
+
             if os.path.getsize(output_path) == 0:
                 return False, "Output file is empty (0 bytes)"
-            
+
             return True, "Success"
-            
+
         finally:
             # Restore strip mute states
             for seq, mute in original_mutes.items():
                 if seq:
                     seq.mute = mute
-                   
+
     except Exception as e:
         return False, f"Unexpected error in _mixdown_audio: {e}"
-    
+
     return False, "Unknown error"
 
 
@@ -420,7 +419,7 @@ def extract_audio_from_strips(
         fd, output_path = tempfile.mkstemp(suffix=".wav", prefix="vse_transcribe_")
         os.close(fd)
 
-    os.makedards(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+    os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
 
     seq_editor = scene.sequence_editor
     if not seq_editor:
