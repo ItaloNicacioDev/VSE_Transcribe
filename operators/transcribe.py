@@ -120,7 +120,7 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
         # Start background thread
         thread = threading.Thread(
             target=self._run_transcription_thread,
-            args=(job_id, audio_path, settings, strip),
+            args=(job_id, audio_path, settings, context),
             daemon=True
         )
         thread.start()
