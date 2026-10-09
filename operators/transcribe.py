@@ -128,27 +128,7 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
         # Register timer to update UI
         bpy.app.timers.register(self._check_progress)
 
-        # Register timer to check progress
-        def check_progress():
-            import bpy
-            with _transcription_lock:
-                if job_id not in _transcription_results:
-                    return None
-                result = _transcription_results[job_id]
-                if result["status"] == "finished":
-                    # Process result
-                    self._process_transcription_result(result, settings, context)
-                    del _transcription_results[job_id]
-                    settings.is_transcribing = False
-                    return None  # Stop timer
-                elif result["status"] == "error":
-                    self.report({"ERROR"}, f"Transcription failed: {result['error']}")
-                    settings.is_transcribing = False
-                    del _transcription_results[job_id]
-                    return None  # Stop timer
-            return 0.5  # Check every 0.5 seconds
-
-        bpy.app.timers.register(check_progress, first_interval=0.5)
+        # No local timer function; _check_progress will be called continuously until finished
         
         return {"FINISHED"}
 
