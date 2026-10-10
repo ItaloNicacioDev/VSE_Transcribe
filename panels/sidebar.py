@@ -29,7 +29,7 @@ class VSETRANSCRIBE_PT_sidebar(Panel):
     bl_idname = "VSETRANSCRIBE_PT_sidebar"
     bl_space_type = "SEQUENCE_EDITOR"
     bl_region_type = "UI"
-    bl_category = "VSE Transcribe"
+    bl_category = "VT"
 
     @classmethod
     def poll(cls, context: Context) -> bool:
@@ -265,4 +265,4 @@ class VSETRANSCRIBE_PT_sidebar(Panel):
         row.prop(sub, "gap_threshold", text="Gap")
 
 
-# Registration handled by __init__.py
+# Registration handled by __init__.pyS
