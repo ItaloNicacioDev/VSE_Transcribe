@@ -91,6 +91,17 @@ def _run_transcription_thread(job_id: str, audio_path: str, config) -> None:
             pass
 
 
+def _tag_redraw() -> None:
+    """Redraw the VSE so the progress shows without moving the mouse."""
+    try:
+        for win in bpy.context.window_manager.windows:
+            for area in win.screen.areas:
+                if area.type == "SEQUENCE_EDITOR":
+                    area.tag_redraw()
+    except Exception:
+        pass
+
+
 def _poll_job(job_id: str):
     """Main-thread timer: updates UI props and finalizes the job."""
     with _transcription_lock:
@@ -111,7 +122,8 @@ def _poll_job(job_id: str):
         settings.is_transcribing = True
         settings.transcription_progress = snapshot["progress"]
         settings.last_word = snapshot["current_word"]
-        return 0.2
+        _tag_redraw()
+        return 0.5
 
     settings.is_transcribing = False
     with _transcription_lock:
@@ -123,6 +135,7 @@ def _poll_job(job_id: str):
         return None
 
     _finalize_transcript(scene, settings, snapshot["result"], snapshot.get("frame_offset", 0))
+    _tag_redraw()
     return None
 
 
@@ -186,7 +199,7 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
     bl_idname = "vse_transcribe.transcribe"
     bl_label = "Transcribe Audio"
     bl_description = "Transcribe selected audio using the configured engine"
-    bl_options = {"REGISTER", "UNDO"}
+    bl_options = {"REGISTER"}  # no UNDO: an undo push of a big video project freezes Blender
 
     @classmethod
     def poll(cls, context: Context) -> bool:
@@ -276,7 +289,7 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
         thread.start()
 
         # Module-level timer: does NOT depend on this operator instance (freed after execute)
-        bpy.app.timers.register(functools.partial(_poll_job, job_id), first_interval=0.2)
+        bpy.app.timers.register(functools.partial(_poll_job, job_id), first_interval=0.5)
         return {"FINISHED"}
 
     @staticmethod
@@ -386,6 +399,8 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
             compute_type=lw.compute_type,
             word_timestamps=lw.word_timestamps,
             model_dir=lw.model_dir or "",
+            cpu_threads=lw.cpu_threads,
+            vad_filter=lw.vad_filter,
         )
 
     def _transcript_to_json(self, transcript: "Transcript") -> str:
