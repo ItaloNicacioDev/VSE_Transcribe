@@ -102,8 +102,8 @@ class LocalWhisperProps(PropertyGroup):
 
     language: StringProperty(
         name="Language",
-        description="Language code (empty = auto-detect)",
-        default="",
+        description="Language code, e.g. pt, en, es (empty = auto-detect)",
+        default="pt",
         maxlen=10,
     )
 
