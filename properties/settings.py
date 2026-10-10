@@ -138,6 +138,20 @@ class LocalWhisperProps(PropertyGroup):
         default=False,
     )
 
+    cpu_threads: IntProperty(
+        name="CPU Threads",
+        description="Threads used by local Whisper (0 = automatic: half of the cores, keeps Blender responsive)",
+        default=0,
+        min=0,
+        max=64,
+    )
+
+    vad_filter: BoolProperty(
+        name="Skip Silence (VAD)",
+        description="Skip silent/music-only parts: faster and avoids made-up text",
+        default=True,
+    )
+
     language: StringProperty(
         name="Language",
         description="Language code, e.g. pt, en, es (empty = auto-detect)",
