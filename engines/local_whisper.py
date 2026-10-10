@@ -41,7 +41,7 @@ class LocalWhisperConfig(EngineConfig):
     compute_type: str = "int8"
     model_dir: str = ""
     cpu_threads: int = 0      # 0 = automatic (half of the cores, keeps Blender responsive)
-    vad_filter: bool = True   # skip silence/music-only parts (faster + fewer hallucinations)
+    vad_filter: bool = False  # skip silence/music-only parts (can cut quiet speech over music)
 
     def __post_init__(self):
         super().__post_init__()
