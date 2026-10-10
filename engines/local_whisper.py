@@ -20,6 +20,17 @@ VALID_DEVICES = ("cpu", "cuda", "auto")
 VALID_COMPUTE_TYPES = ("int8", "int8_float16", "float16", "float32")
 
 
+# Shared across engine instances: the model is loaded once per Blender session
+_FASTER_MODEL_CACHE: dict = {}
+_WHISPER_MODEL_CACHE: dict = {}
+
+
+def _resolve_threads(requested: int) -> int:
+    if requested and requested > 0:
+        return int(requested)
+    return max(1, (os.cpu_count() or 4) // 2)
+
+
 @dataclass
 class LocalWhisperConfig(EngineConfig):
     """Configuration for LocalWhisperEngine."""
@@ -29,6 +40,8 @@ class LocalWhisperConfig(EngineConfig):
     word_timestamps: bool = False
     compute_type: str = "int8"
     model_dir: str = ""
+    cpu_threads: int = 0      # 0 = automatic (half of the cores, keeps Blender responsive)
+    vad_filter: bool = True   # skip silence/music-only parts (faster + fewer hallucinations)
 
     def __post_init__(self):
         super().__post_init__()
@@ -42,7 +55,7 @@ class LocalWhisperEngine(TranscriptionEngine):
     name = "local_whisper"
 
     def __init__(self):
-        self._model_cache = {}
+        self._model_cache = _FASTER_MODEL_CACHE
 
     def _validate_config(self, config: EngineConfig) -> None:
         """Validate engine configuration."""
@@ -100,7 +113,12 @@ class LocalWhisperEngine(TranscriptionEngine):
             return None
 
     def _has_cuda(self) -> bool:
-        """Check if CUDA is available."""
+        """Check if CUDA is available (ctranslate2 first: importing torch freezes Blender)."""
+        try:
+            import ctranslate2
+            return ctranslate2.get_cuda_device_count() > 0
+        except Exception:
+            pass
         torch = self._get_torch()
         if torch is None:
             return False
@@ -109,7 +127,7 @@ class LocalWhisperEngine(TranscriptionEngine):
         except Exception:
             return False
 
-    def _get_or_load_model(self, model_size: str, device: str, compute_type: str, model_dir: str = ""):
+    def _get_or_load_model(self, model_size: str, device: str, compute_type: str, model_dir: str = "", cpu_threads: int = 0):
         """Get or create cached WhisperModel."""
         # If model_dir is not set, default to a "models" subdirectory in the addon root
         if not model_dir:
@@ -119,11 +137,15 @@ class LocalWhisperEngine(TranscriptionEngine):
             addon_root = os.path.dirname(os.path.dirname(current_dir))
             # Default model directory is addon_root/models
             model_dir = os.path.join(addon_root, "models")
-        cache_key = (model_size, device, compute_type, model_dir)
+        threads = _resolve_threads(cpu_threads)
+        cache_key = (model_size, device, compute_type, model_dir, threads)
         if cache_key not in self._model_cache:
             WhisperModel = self._get_faster_whisper()
             os.makedirs(model_dir, exist_ok=True)
-            self._model_cache[cache_key] = WhisperModel(model_size, device=device, compute_type=compute_type, download_root=model_dir)
+            self._model_cache[cache_key] = WhisperModel(
+                model_size, device=device, compute_type=compute_type,
+                download_root=model_dir, cpu_threads=threads,
+            )
         return self._model_cache[cache_key]
 
     def transcribe(self, audio_path: str, config: EngineConfig, progress_callback=None) -> Transcript:
@@ -172,13 +194,17 @@ class LocalWhisperEngine(TranscriptionEngine):
         if config.model_dir:
             os.environ["WHISPER_CACHE_DIR"] = config.model_dir
         # Get or create model (cached)
-        model = self._get_or_load_model(config.model_size, device, config.compute_type, config.model_dir)
+        model = self._get_or_load_model(
+            config.model_size, device, config.compute_type, config.model_dir, config.cpu_threads
+        )
 
         # Run transcription
         segments, info = model.transcribe(
             audio_path,
             language=config.language,
             word_timestamps=config.word_timestamps,
+            vad_filter=config.vad_filter,
+            vad_parameters={"min_silence_duration_ms": 500},
         )
 
         if progress_callback is not None:
@@ -208,14 +234,24 @@ class LocalWhisperEngine(TranscriptionEngine):
         if config.model_dir:
             os.environ["WHISPER_CACHE_DIR"] = config.model_dir
 
-        # Load model
-        model = whisper.load_model(config.model_size, device=device)
+        # Limit CPU threads so Blender stays responsive; reuse the loaded model
+        torch = self._get_torch()
+        if torch is not None and device == "cpu":
+            try:
+                torch.set_num_threads(_resolve_threads(config.cpu_threads))
+            except Exception:
+                pass
+        key = (config.model_size, device)
+        if key not in _WHISPER_MODEL_CACHE:
+            _WHISPER_MODEL_CACHE[key] = whisper.load_model(config.model_size, device=device)
+        model = _WHISPER_MODEL_CACHE[key]
 
         # Run transcription
         result = model.transcribe(
             audio_path,
             language=config.language,
             word_timestamps=config.word_timestamps,
+            fp16=(device == "cuda"),
         )
 
         # Convert to our Transcript format
