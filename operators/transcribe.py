@@ -134,12 +134,12 @@ def _poll_job(job_id: str):
         settings.status_text = f"Error: {snapshot['error']}"
         return None
 
-    _finalize_transcript(scene, settings, snapshot["result"], snapshot.get("frame_offset", 0))
+    _finalize_transcript(scene, settings, snapshot["result"], snapshot.get("frame_offset", 0), snapshot.get("audio_info", ""))
     _tag_redraw()
     return None
 
 
-def _finalize_transcript(scene, settings, transcript, frame_offset: int = 0) -> None:
+def _finalize_transcript(scene, settings, transcript, frame_offset: int = 0, audio_info: str = "") -> None:
     """Store transcript and auto-create subtitle strips (main thread)."""
     if not transcript or transcript.is_empty:
         settings.status_text = "No speech detected"
@@ -184,7 +184,7 @@ def _finalize_transcript(scene, settings, transcript, frame_offset: int = 0) -> 
             settings.generated_strips.add().name = strip.name
         settings.status_text = (
             f"Created {len(strips)} strips on channel {channel} | "
-            f"language: {transcript.language} | audio: {transcript.duration:.1f}s"
+            f"language: {transcript.language} | {audio_info or f'audio: {transcript.duration:.1f}s'}"
         )
         print(f"[VSE_Transcribe] {settings.status_text}")
     except Exception as e:
@@ -257,6 +257,39 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
                 self.report({"ERROR"}, "Failed to extract audio from strip (no sequence editor)")
             return {"CANCELLED"}
 
+        # --- Sanity check of what Whisper will receive ---
+        from VSE_Transcrib.utils.audio import analyze_audio
+        info = analyze_audio(audio_path)
+        audio_info = ""
+        if info:
+            audio_info = f"audio {info['duration']:.1f}s"
+            if info["peak"] is not None:
+                audio_info += f", peak {info['peak']:.2f}, rms {info['rms']:.3f}"
+        print(f"[VSE_Transcribe] extracted {audio_info or 'audio (format not analyzable)'}")
+
+        if info and info["peak"] is not None and info["peak"] < 0.002:
+            try:
+                os.remove(audio_path)
+            except OSError:
+                pass
+            settings.status_text = "Extracted audio is SILENT"
+            self.report(
+                {"ERROR"},
+                "Extracted audio is silent. Check that the strip's sound is not muted, "
+                "its volume is not 0, and the audio strip exists (MOVIE needs a linked SOUND strip).",
+            )
+            return {"CANCELLED"}
+
+        if settings.keep_audio:
+            import shutil
+            kept = os.path.join(tempfile.gettempdir(), "vse_transcribe_last_audio.wav")
+            try:
+                shutil.copyfile(audio_path, kept)
+                print(f"[VSE_Transcribe] kept extracted audio: {kept}")
+                audio_info += f" | saved: {kept}"
+            except OSError as e:
+                print(f"[VSE_Transcribe] could not keep audio: {e}")
+
         # Build engine config on the MAIN thread (bpy properties are not thread-safe)
         config = self._build_engine_config(settings)
 
@@ -273,6 +306,7 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
                 "progress": 0.0,
                 "current_word": "",
                 "frame_offset": int(strip.frame_final_start),
+                "audio_info": audio_info,
             }
 
         settings.is_transcribing = True
