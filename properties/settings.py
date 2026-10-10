@@ -6,6 +6,8 @@ Lazy bpy imports for compatibility outside Blender.
 
 from __future__ import annotations
 
+import os
+
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -32,11 +34,13 @@ try:
         PointerProperty,
         CollectionProperty,
     )
-    from bpy.types import PropertyGroup, Scene
+    from bpy.types import PropertyGroup, Scene, AddonPreferences
     _HAS_BPY = True
 except ImportError:
     # Outside Blender - for syntax checking only
     class PropertyGroup:
+        pass
+    class AddonPreferences:
         pass
     class Scene:
         pass
@@ -57,6 +61,37 @@ except ImportError:
     _HAS_BPY = False
 
 
+ADDON_ID = (__package__ or "VSE_Transcrib").split(".")[0]
+
+
+class VSETranscribePreferences(AddonPreferences):
+    """Add-on preferences (API keys live here, NOT inside the .blend project)."""
+
+    bl_idname = ADDON_ID
+
+    groq_api_key: StringProperty(
+        name="Groq API Key",
+        description="Key from console.groq.com/keys (or set the GROQ_API_KEY environment variable)",
+        default="",
+        subtype="PASSWORD",
+    )
+
+    def draw(self, context):
+        col = self.layout.column()
+        col.prop(self, "groq_api_key")
+        col.label(text="Free key: console.groq.com/keys  (or env var GROQ_API_KEY)", icon="INFO")
+
+
+def get_groq_api_key() -> str:
+    """API key from add-on preferences, falling back to GROQ_API_KEY."""
+    key = ""
+    try:
+        key = bpy.context.preferences.addons[ADDON_ID].preferences.groq_api_key
+    except Exception:
+        pass
+    return (key or os.environ.get("GROQ_API_KEY", "")).strip()
+
+
 class LocalWhisperProps(PropertyGroup):
     """Settings for Local Whisper engine."""
 
@@ -64,9 +99,12 @@ class LocalWhisperProps(PropertyGroup):
         name="Model Size",
         description="Whisper model size (Small=fastest, Large-v3-Turbo=most accurate)",
         items=[
+            ("tiny", "Tiny", "Fastest, lowest accuracy (~75 MB)"),
+            ("base", "Base", "Fast, basic accuracy (~145 MB)"),
             ("small", "Small", "Better accuracy, good speed (~244 MB)"),
             ("medium", "Medium", "High accuracy, moderate speed (~769 MB)"),
-            ("large-v3-turbo", "Large-v3-Turbo", "Highest accuracy, optimized for speed (~1550 MB)"),
+            ("large-v3-turbo", "Large-v3-Turbo", "Very accurate, optimized for speed (~1550 MB)"),
+            ("large-v3", "Large-v3", "Most accurate, slowest (~3 GB)"),
         ],
         default="small",
     )
@@ -158,6 +196,27 @@ class GeneratedStripName(PropertyGroup):
 
 class VSETranscribeSettings(PropertyGroup):
     """Main settings for VSE_Transcribe addon."""
+
+    # Engine selection
+    engine_type: EnumProperty(
+        name="Engine",
+        description="Where the transcription runs",
+        items=[
+            ("LOCAL", "Local Whisper", "Runs on this PC (downloads the model on first use)"),
+            ("GROQ", "Groq API", "Cloud Whisper, very fast. Needs a Groq API key"),
+        ],
+        default="LOCAL",
+    )
+
+    groq_model: EnumProperty(
+        name="Groq Model",
+        description="Whisper model used on Groq",
+        items=[
+            ("whisper-large-v3-turbo", "Large-v3-Turbo", "Fast and cheap"),
+            ("whisper-large-v3", "Large-v3", "Most accurate"),
+        ],
+        default="whisper-large-v3-turbo",
+    )
 
     # Local Whisper settings
     local_whisper: PointerProperty(type=LocalWhisperProps)
@@ -254,6 +313,7 @@ def register_properties():
     """Register all property groups."""
     if not _HAS_BPY:
         return
+    bpy.utils.register_class(VSETranscribePreferences)
     bpy.utils.register_class(LocalWhisperProps)
     bpy.utils.register_class(SubtitleProps)
     bpy.utils.register_class(GeneratedStripName)
@@ -273,3 +333,4 @@ def unregister_properties():
     bpy.utils.unregister_class(GeneratedStripName)
     bpy.utils.unregister_class(SubtitleProps)
     bpy.utils.unregister_class(LocalWhisperProps)
+    bpy.utils.unregister_class(VSETranscribePreferences)
