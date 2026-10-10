@@ -262,6 +262,10 @@ class VSETRANSCRIBE_PT_sidebar(Panel):
         row = box.row()
         row.prop(settings.local_whisper, "word_timestamps")
         row = box.row()
+        row.prop(settings.local_whisper, "vad_filter")
+        row = box.row()
+        row.prop(settings.local_whisper, "cpu_threads")
+        row = box.row()
         row.prop(settings.local_whisper, "model_dir")
 
     def _draw_subtitle_settings_compact(self, layout, settings):
