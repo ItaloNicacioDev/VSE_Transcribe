@@ -158,7 +158,10 @@ def _finalize_transcript(scene, settings, transcript) -> None:
         settings.generated_strips.clear()
         for strip in strips:
             settings.generated_strips.add().name = strip.name
-        settings.status_text = f"Created {len(strips)} subtitle strips on channel {channel}"
+        settings.status_text = (
+            f"Created {len(strips)} strips on channel {channel} | "
+            f"language: {transcript.language} | audio: {transcript.duration:.1f}s"
+        )
         print(f"[VSE_Transcribe] {settings.status_text}")
     except Exception as e:
         import traceback
