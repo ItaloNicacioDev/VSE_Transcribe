@@ -159,6 +159,8 @@ class StripManager:
 
         fps = self._fps()
         created: List["TextSequence"] = []
+        # Computed ONCE (was re-scanning every strip for each subtitle: O(n^2) freeze)
+        occupied_end = self._channel_occupied_end(channel)
 
         for block in blocks:
             frame_start = seconds_to_frames(block.start, fps) + frame_offset
@@ -166,7 +168,6 @@ class StripManager:
 
             # Não-sobreposição: empurra para depois do último frame ocupado
             # no canal, se necessário.
-            occupied_end = self._channel_occupied_end(channel)
             if occupied_end is not None and frame_start < occupied_end:
                 shift = occupied_end - frame_start
                 frame_start += shift
@@ -182,6 +183,7 @@ class StripManager:
             )
             strip[MANAGED_KEY] = True
             created.append(strip)
+            occupied_end = frame_end if occupied_end is None else max(occupied_end, frame_end)
 
         return created
 
