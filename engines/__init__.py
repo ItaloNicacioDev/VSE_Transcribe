@@ -21,6 +21,12 @@ try:
 except ImportError:
     pass
 
+# Groq cloud Whisper engine (stdlib only)
+try:
+    from . import groq_api  # noqa: F401
+except ImportError:
+    pass
+
 # External API engine removed per Whisper-only requirement
 # try:
 #     from . import external_api  # noqa: F401
