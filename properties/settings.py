@@ -148,8 +148,8 @@ class LocalWhisperProps(PropertyGroup):
 
     vad_filter: BoolProperty(
         name="Skip Silence (VAD)",
-        description="Skip silent/music-only parts: faster and avoids made-up text",
-        default=True,
+        description="Skip silent/music-only parts: faster, but can cut quiet speech over music",
+        default=False,
     )
 
     language: StringProperty(
@@ -230,6 +230,12 @@ class VSETranscribeSettings(PropertyGroup):
             ("whisper-large-v3", "Large-v3", "Most accurate"),
         ],
         default="whisper-large-v3-turbo",
+    )
+
+    keep_audio: BoolProperty(
+        name="Keep Extracted Audio (debug)",
+        description="Save the extracted audio as vse_transcribe_last_audio.wav in the temp folder so you can listen to what Whisper receives",
+        default=False,
     )
 
     # Local Whisper settings
