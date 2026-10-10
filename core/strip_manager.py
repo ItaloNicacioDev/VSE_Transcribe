@@ -138,7 +138,7 @@ class StripManager:
     # ------------------------------------------------------------------
 
     def create_subtitle_strips(
-        self, blocks: List[SubtitleBlock], channel: int
+        self, blocks: List[SubtitleBlock], channel: int, frame_offset: int = 0
     ) -> List["TextSequence"]:
         """Cria Text Strips no ``channel`` a partir de ``blocks``.
 
@@ -161,8 +161,8 @@ class StripManager:
         created: List["TextSequence"] = []
 
         for block in blocks:
-            frame_start = seconds_to_frames(block.start, fps)
-            frame_end = seconds_to_frames(block.end, fps)
+            frame_start = seconds_to_frames(block.start, fps) + frame_offset
+            frame_end = seconds_to_frames(block.end, fps) + frame_offset
 
             # Não-sobreposição: empurra para depois do último frame ocupado
             # no canal, se necessário.
