@@ -280,9 +280,13 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
             return None
 
         # Try sequences_all (Blender 5.2+) fallback to sequences
-        strips = getattr(seq_editor, "sequences_all", None)
+        strips = None
+        for attr in ("strips_all", "sequences_all", "strips", "sequences"):
+            strips = getattr(seq_editor, attr, None)
+            if strips is not None:
+                break
         if strips is None:
-            strips = getattr(seq_editor, "sequences", [])
+            strips = []
 
         # Check selected strips first (SOUND and MOVIE types have audio)
         for strip in strips:
