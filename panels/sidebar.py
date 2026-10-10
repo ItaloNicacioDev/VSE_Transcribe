@@ -109,6 +109,7 @@ class VSETRANSCRIBE_PT_sidebar(Panel):
             self._draw_groq_settings(box, settings)
         else:
             self._draw_local_whisper_settings(box, settings)
+        box.prop(settings, "keep_audio")
 
         layout.separator()
 
