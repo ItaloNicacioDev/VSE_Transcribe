@@ -1,373 +1,120 @@
-"""Transcribe operator for VSE_Transcribe.
+"""VSE_Transcribe - Blender VSE Transcription Addon.
 
-Runs transcription using the selected engine and stores the result.
+AI-powered transcription and subtitle generation for the Blender Video Sequence Editor.
 """
 
 from __future__ import annotations
 
-import functools
-import json
-import os
-import tempfile
-import threading
-import time
-from typing import TYPE_CHECKING, Callable, Optional
-
-if TYPE_CHECKING:
-    from VSE_Transcrib.models.transcript import Transcript
-
 try:
     import bpy
-    from bpy.props import StringProperty
-    from bpy.types import Operator, Context
     _HAS_BPY = True
 except ImportError:
-    # Outside Blender - for syntax checking only
-    class Operator:
-        pass
-    class Context:
-        pass
-    def StringProperty(**kwargs):
-        return None
     _HAS_BPY = False
 
+# Import all modules to register their classes
+from . import properties
+from . import operators
+from . import panels
+from . import engines
+from . import core
+from . import models
+from . import utils
 
-# Global storage for async transcription results
-_transcription_results = {}
-_transcription_lock = threading.Lock()
+# Re-export key types for external access
+from .engines.base import (
+    EngineConfig,
+    EngineNotAvailableError,
+    TranscriptionEngine,
+    TranscriptionError,
+    InvalidConfigError,
+)
+from .models.transcript import Transcript, TranscriptSegment, TranscriptWord
+
+# -----------------------------------------------------------------------------
+# bl_info - REQUIRED for Blender addon recognition
+# -----------------------------------------------------------------------------
+
+bl_info = {
+    "name": "VSE_Transcribe",
+    "author": "Italo Nicacio",
+    "description": "AI-powered transcription and subtitle generation for the Blender Video Sequence Editor.",
+    "blender": (5, 2, 0),
+    "version": (0, 1, 18),
+    "location": "3D Viewport > Sidebar > VSE Transcribe",
+    "category": "Sequencer",
+    "wiki_url": "https://github.com/ItaloNicacioDev/VSE_Transcribe",
+    "tracker_url": "https://github.com/ItaloNicacioDev/VSE_Transcribe/issues",
+    "support": "COMMUNITY",
+}
+
+__version__ = "0.1.13"
 
 
-def _transcript_to_json(transcript) -> str:
-    """Serialize Transcript to JSON."""
-    data = {
-        "language": transcript.language,
-        "duration": transcript.duration,
-        "metadata": transcript.metadata,
-        "segments": [],
-    }
-    for seg in transcript.segments:
-        data["segments"].append({
-            "start": seg.start,
-            "end": seg.end,
-            "text": seg.text,
-            "words": [
-                {"text": w.text, "start": w.start, "end": w.end, "confidence": w.confidence}
-                for w in seg.words
-            ],
-        })
-    return json.dumps(data, ensure_ascii=False)
+# -----------------------------------------------------------------------------
+# Registration
+# -----------------------------------------------------------------------------
+
+CLASSES = (    operators.VSETRANSCRIBE_OT_transcribe,
+    operators.VSETRANSCRIBE_OT_create_subtitles,
+    operators.VSETRANSCRIBE_OT_clear_subtitles,
+    operators.VSETRANSCRIBE_OT_export_subtitles,
+    operators.VSETRANSCRIBE_OT_download_model,
+    operators.VSETRANSCRIBE_OT_browse_audio,
+    operators.VSETRANSCRIBE_OT_cancel_transcription,
+
+    # Panels
+    panels.VSETRANSCRIBE_PT_sidebar,
+
+)
 
 
-def _set_job(job_id: str, **fields) -> None:
-    with _transcription_lock:
-        if job_id in _transcription_results:
-            _transcription_results[job_id].update(fields)
+def register() -> None:
+    """Register all VSE_Transcribe classes and properties."""
+    if not _HAS_BPY:
+        raise RuntimeError("Cannot register: not running inside Blender")
+
+    # Register properties first (operators/panels depend on them)
+    properties.register_properties()
+
+    # Register all other classes
+    for cls in CLASSES:
+        bpy.utils.register_class(cls)
+
+    # Register menus
+    from . import ui
+    ui.register_menus()
+
+    print("[VSE_Transcribe] Addon registered successfully.")
 
 
-def _run_transcription_thread(job_id: str, audio_path: str, config) -> None:
-    """Background thread: touches NO bpy data."""
+def unregister() -> None:
+    """Unregister all VSE_Transcribe classes and properties."""
+    if not _HAS_BPY:
+        return
+
+    # Unregister menus first
     try:
-        from VSE_Transcrib.engines.local_whisper import LocalWhisperEngine
-        from VSE_Transcrib.core.transcription import validate_transcript, normalize_transcript
+        from . import ui
+        ui.unregister_menus()
+    except Exception:
+        pass
 
-        def on_progress(progress: float, word: str = "") -> None:
-            _set_job(job_id, progress=progress, current_word=word)
-
-        engine = LocalWhisperEngine()
-        transcript = engine.transcribe(audio_path, config, progress_callback=on_progress)
-        validate_transcript(transcript)  # warnings only
-        transcript = normalize_transcript(transcript)
-        _set_job(job_id, status="finished", result=transcript)
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        _set_job(job_id, status="error", error=f"{type(e).__name__}: {e}")
-    finally:
+    # Unregister classes in reverse order
+    for cls in reversed(CLASSES):
         try:
-            if audio_path and os.path.exists(audio_path):
-                os.remove(audio_path)
+            bpy.utils.unregister_class(cls)
         except Exception:
             pass
 
+    # Unregister properties
+    properties.unregister_properties()
 
-def _poll_job(job_id: str):
-    """Main-thread timer: updates UI props and finalizes the job."""
-    with _transcription_lock:
-        data = _transcription_results.get(job_id)
-        if data is None:
-            return None
-        snapshot = dict(data)
-
-    scene = bpy.data.scenes.get(snapshot["scene_name"])
-    settings = getattr(scene, "vse_transcribe", None) if scene else None
-    if settings is None:
-        with _transcription_lock:
-            _transcription_results.pop(job_id, None)
-        return None
-
-    status = snapshot["status"]
-    if status in {"started", "running"}:
-        settings.is_transcribing = True
-        settings.transcription_progress = snapshot["progress"]
-        settings.last_word = snapshot["current_word"]
-        return 0.2
-
-    settings.is_transcribing = False
-    with _transcription_lock:
-        _transcription_results.pop(job_id, None)
-
-    if status == "error":
-        print(f"[VSE_Transcribe] Transcription failed: {snapshot['error']}")
-        settings.status_text = f"Error: {snapshot['error']}"
-        return None
-
-    _finalize_transcript(scene, settings, snapshot["result"], snapshot.get("frame_offset", 0))
-    return None
+    print("[VSE_Transcribe] Addon unregistered successfully.")
 
 
-def _finalize_transcript(scene, settings, transcript, frame_offset: int = 0) -> None:
-    """Store transcript and auto-create subtitle strips (main thread)."""
-    if not transcript or transcript.is_empty:
-        settings.status_text = "No speech detected"
-        print("[VSE_Transcribe] No transcript result received")
-        return
+# -----------------------------------------------------------------------------
+# Development entry point
+# -----------------------------------------------------------------------------
 
-    settings.transcript_storage = _transcript_to_json(transcript)
-    settings.transcription_progress = 1.0
-
-    try:
-        from VSE_Transcrib.core.subtitle_engine import SubtitleConfig, prepare_subtitles
-        from VSE_Transcrib.core.strip_manager import (
-            StripManager, MANAGED_KEY, _get_sequences_local,
-        )
-
-        blocks = prepare_subtitles(transcript, SubtitleConfig(
-            max_chars_per_line=settings.subtitle.max_chars_per_line,
-            max_lines=settings.subtitle.max_lines,
-            min_duration=settings.subtitle.min_duration,
-            gap_threshold=settings.subtitle.gap_threshold,
-        ))
-        if not blocks:
-            settings.status_text = "No subtitle blocks generated"
-            return
-
-        if not scene.sequence_editor:
-            scene.sequence_editor_create()
-
-        manager = StripManager(scene, scene.sequence_editor)
-        manager.clear_managed_strips()  # evita legendas duplicadas ao re-transcrever
-
-        # Canal logo acima de TODOS os strips que não são legenda
-        others = [
-            s.channel for s in _get_sequences_local(scene.sequence_editor)
-            if not s.get(MANAGED_KEY)
-        ]
-        channel = (max(others) + 1) if others else 1
-        strips = manager.create_subtitle_strips(blocks, channel, frame_offset=frame_offset)
-
-        settings.generated_strips.clear()
-        for strip in strips:
-            settings.generated_strips.add().name = strip.name
-        settings.status_text = (
-            f"Created {len(strips)} strips on channel {channel} | "
-            f"language: {transcript.language} | audio: {transcript.duration:.1f}s"
-        )
-        print(f"[VSE_Transcribe] {settings.status_text}")
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        settings.status_text = f"Failed to generate subtitle strips: {e}"
-
-
-class VSETRANSCRIBE_OT_transcribe(Operator):
-    """Transcribe audio using the selected engine."""
-
-    bl_idname = "vse_transcribe.transcribe"
-    bl_label = "Transcribe Audio"
-    bl_description = "Transcribe selected audio using the configured engine"
-    bl_options = {"REGISTER", "UNDO"}
-
-    @classmethod
-    def poll(cls, context: Context) -> bool:
-        """Check if operator can run."""
-        if not _HAS_BPY:
-            return False
-        # Need a SOUND or MOVIE strip selected
-        return cls._get_active_audio_strip(context) is not None
-
-    def execute(self, context: Context) -> set:
-        """Execute transcription (async)."""
-        if not _HAS_BPY:
-            self.report({"ERROR"}, "Not running inside Blender")
-            return {"CANCELLED"}
-
-        settings = context.scene.vse_transcribe
-
-        # Get audio strip (SOUND or MOVIE)
-        strip = self._get_active_audio_strip(context)
-        if not strip:
-            self.report({"ERROR"}, "No audio strip selected. Select a SOUND or MOVIE strip in the VSE.")
-            return {"CANCELLED"}
-
-        # Extract audio from strip via sound.mixdown (fast, respects trims, volume, effects)
-        self.report({"INFO"}, "Extracting audio from strip...")
-        from VSE_Transcrib.utils.audio import extract_audio_from_strip
-        audio_path = extract_audio_from_strip(strip, context.scene)
-
-        if not audio_path or not os.path.exists(audio_path):
-            # Try to get more specific error from the extraction
-            from VSE_Transcrib.utils.audio import _mixdown_audio
-            seq_editor = context.scene.sequence_editor
-            if seq_editor:
-                # Try to get more specific error
-                try:
-                    temp_path = os.path.join(tempfile.gettempdir(), f"vse_transcribe_debug_{os.getpid()}.wav")
-                    success, error = _mixdown_audio(context.scene, context.scene.sequence_editor, temp_path, 16000, [strip])
-                    if error:
-                        self.report({"ERROR"}, f"Failed to extract audio from strip: {error}")
-                    else:
-                        self.report({"ERROR"}, "Failed to extract audio from strip (unknown error)")
-                except Exception as e:
-                    self.report({"ERROR"}, f"Failed to extract audio from strip: {e}")
-            else:
-                self.report({"ERROR"}, "Failed to extract audio from strip (no sequence editor)")
-            return {"CANCELLED"}
-
-        # Build engine config on the MAIN thread (bpy properties are not thread-safe)
-        config = self._build_engine_config(settings)
-
-        import uuid
-        job_id = str(uuid.uuid4())[:8]
-
-        with _transcription_lock:
-            _transcription_results[job_id] = {
-                "status": "started",
-                "scene_name": context.scene.name,
-                "result": None,
-                "error": None,
-                "start_time": time.time(),
-                "progress": 0.0,
-                "current_word": "",
-                "frame_offset": int(strip.frame_final_start),
-            }
-
-        settings.is_transcribing = True
-        settings.transcription_job_id = job_id
-        settings.transcription_icon_index = 0
-        settings.transcription_progress = 0.0
-        self.report({"INFO"}, f"Starting transcription (job: {job_id})...")
-
-        thread = threading.Thread(
-            target=_run_transcription_thread,
-            args=(job_id, audio_path, config),
-            daemon=True,
-        )
-        thread.start()
-
-        # Module-level timer: does NOT depend on this operator instance (freed after execute)
-        bpy.app.timers.register(functools.partial(_poll_job, job_id), first_interval=0.2)
-        return {"FINISHED"}
-
-    @staticmethod
-    def _report_info(context, message):
-        if hasattr(context, 'window_manager'):
-            context.window_manager.popup_menu(lambda self, ctx: self.layout.label(text=message), title="Info", icon='INFO')
-    
-    @staticmethod
-    def _report_warning(context, message):
-        if hasattr(context, 'window_manager'):
-            context.window_manager.popup_menu(lambda self, ctx: self.layout.label(text=message), title="Warning", icon='WARNING')
-    
-    @staticmethod
-    def _report_error(context, message):
-        if hasattr(context, 'window_manager'):
-            context.window_manager.popup_menu(lambda self, ctx: self.layout.label(text=message), title="Error", icon='ERROR')
-
-    @staticmethod
-    def _get_active_audio_strip(context: Context):
-        """Get the active sound/movie strip in the VSE."""
-        if not _HAS_BPY:
-            return None
-
-        seq_editor = context.scene.sequence_editor
-        if not seq_editor:
-            return None
-
-        # Try sequences_all (Blender 5.2+) fallback to sequences
-        strips = None
-        for attr in ("strips_all", "sequences_all", "strips", "sequences"):
-            strips = getattr(seq_editor, attr, None)
-            if strips is not None:
-                break
-        if strips is None:
-            strips = []
-
-        # Check selected strips first (SOUND and MOVIE types have audio)
-        for strip in strips:
-            if strip.select and strip.type in {"SOUND", "MOVIE"}:
-                return strip
-
-        # Also check active strip
-        active = getattr(seq_editor, "active_strip", None)
-        if active and active.type in {"SOUND", "MOVIE"}:
-            return active
-
-        return None
-    
-    @staticmethod
-    def _get_strip_audio_path(strip, context: Context) -> str | None:
-        """Get the audio file path from a strip (handles both SOUND and MOVIE types)."""
-        if not _HAS_BPY:
-            return None
-        
-        import bpy
-        if strip.type == "SOUND" and strip.sound:
-            filepath = bpy.path.abspath(strip.sound.filepath)
-            if os.path.exists(filepath):
-                return filepath
-        elif strip.type == "MOVIE":
-            # MOVIE strips: check elements for sound
-            try:
-                for element in strip.elements:
-                    if element.sound:
-                        filepath = bpy.path.abspath(element.sound.filepath)
-                        if os.path.exists(filepath):
-                            return filepath
-            except Exception:
-                pass
-        
-        return None
-
-    def _get_audio_path(self, context: Context, settings) -> str | None:
-        """Get the audio file path from strip or settings."""
-        # Try selected/active sound strip first
-        strip = self._get_active_audio_strip(context)
-        if strip:
-            audio_path = self._get_strip_audio_path(strip, context)
-            if audio_path:
-                return audio_path
-
-        # Fallback to audio_source setting
-        if settings.audio_source:
-            return bpy.path.abspath(settings.audio_source)
-
-        return None
-
-    def _build_engine_config(self, settings):
-        """Build engine config from settings."""
-        from VSE_Transcrib.engines.local_whisper import LocalWhisperConfig
-        lw = settings.local_whisper
-        return LocalWhisperConfig(
-            language=lw.language or None,
-            model_size=lw.model_size,
-            device=lw.device,
-            compute_type=lw.compute_type,
-            word_timestamps=lw.word_timestamps,
-        )
-
-    def _transcript_to_json(self, transcript: "Transcript") -> str:
-        """Serialize Transcript to JSON."""
-        return _transcript_to_json(transcript)
-
-
-# Registration handled by __init__.py
+if __name__ == "__main__":
+    register()
