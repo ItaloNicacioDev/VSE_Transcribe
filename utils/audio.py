@@ -287,6 +287,46 @@ def _render_audio_fallback(
         return False, f"Render fallback failed: {e}"
 
 
+def _linked_audio_strips(strip, seq_editor) -> list:
+    """Return [strip] + the SOUND strip(s) that carry this MOVIE strip's audio.
+
+    A MOVIE strip does not play audio by itself: the sound comes from a linked
+    SOUND strip. If that one is muted, the mixdown is silent/empty.
+    """
+    result = [strip]
+    if strip.type != "MOVIE":
+        return result
+    try:
+        movie_path = None
+        try:
+            movie_path = os.path.normcase(os.path.abspath(bpy.path.abspath(strip.filepath)))
+        except Exception:
+            pass
+        for seq in _get_sequences(seq_editor):
+            if seq == strip or seq.type != "SOUND":
+                continue
+            same_file = False
+            try:
+                snd = os.path.normcase(os.path.abspath(bpy.path.abspath(seq.sound.filepath)))
+                same_file = movie_path is not None and snd == movie_path
+            except Exception:
+                pass
+            same_range = (
+                seq.frame_final_start == strip.frame_final_start
+                and seq.frame_final_end == strip.frame_final_end
+            )
+            if same_file and (same_range or (
+                seq.frame_final_start < strip.frame_final_end
+                and seq.frame_final_end > strip.frame_final_start
+            )):
+                result.append(seq)
+            elif movie_path is None and same_range:
+                result.append(seq)
+    except Exception:
+        pass
+    return result
+
+
 def extract_audio_from_strip(
     strip: "Sequence",
     scene: "Scene",
@@ -328,16 +368,17 @@ def extract_audio_from_strip(
     if not seq_editor:
         return None
 
-    # Mute all other strips except the target
+    # Mute all other strips except the target (and its linked SOUND strip)
+    targets = _linked_audio_strips(strip, seq_editor)
     original_mutes = {}
     for seq in _get_sequences(seq_editor):
         original_mutes[seq] = seq.mute
-        seq.mute = (seq != strip)
+        seq.mute = seq not in targets
 
     try:
         # Try sound.mixdown first (fast)
         print(f"[VSE_Transcribe] Attempting sound.mixdown for strip '{strip.name}'...")
-        success, error = _mixdown_audio(scene, scene.sequence_editor, output_path, sample_rate, [strip])
+        success, error = _mixdown_audio(scene, scene.sequence_editor, output_path, sample_rate, targets)
         
         if success and os.path.exists(output_path) and os.path.getsize(output_path) > 0:
             print(f"[VSE_Transcribe] sound.mixdown succeeded: {output_path}")
@@ -347,7 +388,7 @@ def extract_audio_from_strip(
         print(f"[VSE_Transcribe] sound.mixdown failed: {error}. Trying render fallback...")
         
         # Try render fallback
-        success, error = _render_audio_fallback(scene, scene.sequence_editor, output_path, sample_rate, [strip])
+        success, error = _render_audio_fallback(scene, scene.sequence_editor, output_path, sample_rate, targets)
         
         if success and os.path.exists(output_path) and os.path.getsize(output_path) > 0:
             print(f"[VSE_Transcribe] Render fallback succeeded: {output_path}")
