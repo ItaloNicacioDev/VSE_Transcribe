@@ -68,12 +68,13 @@ def _run_transcription_thread(job_id: str, audio_path: str, config) -> None:
     """Background thread: touches NO bpy data."""
     try:
         from VSE_Transcrib.engines.local_whisper import LocalWhisperEngine
+        from VSE_Transcrib.engines.groq_api import GroqConfig, GroqEngine
         from VSE_Transcrib.core.transcription import validate_transcript, normalize_transcript
 
         def on_progress(progress: float, word: str = "") -> None:
             _set_job(job_id, progress=progress, current_word=word)
 
-        engine = LocalWhisperEngine()
+        engine = GroqEngine() if isinstance(config, GroqConfig) else LocalWhisperEngine()
         transcript = engine.transcribe(audio_path, config, progress_callback=on_progress)
         validate_transcript(transcript)  # warnings only
         transcript = normalize_transcript(transcript)
@@ -202,6 +203,16 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
             return {"CANCELLED"}
 
         settings = context.scene.vse_transcribe
+
+        if settings.engine_type == "GROQ":
+            from VSE_Transcrib.properties.settings import get_groq_api_key
+            if not get_groq_api_key():
+                self.report(
+                    {"ERROR"},
+                    "Groq API key missing: Edit > Preferences > Add-ons > VSE_Transcribe "
+                    "(or set env var GROQ_API_KEY)",
+                )
+                return {"CANCELLED"}
 
         # Get audio strip (SOUND or MOVIE)
         strip = self._get_active_audio_strip(context)
@@ -354,15 +365,27 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
         return None
 
     def _build_engine_config(self, settings):
-        """Build engine config from settings."""
-        from VSE_Transcrib.engines.local_whisper import LocalWhisperConfig
+        """Build engine config from settings (runs on the main thread)."""
         lw = settings.local_whisper
+
+        if settings.engine_type == "GROQ":
+            from VSE_Transcrib.engines.groq_api import GroqConfig
+            from VSE_Transcrib.properties.settings import get_groq_api_key
+            return GroqConfig(
+                language=lw.language or None,
+                api_key=get_groq_api_key(),
+                model=settings.groq_model,
+                word_timestamps=lw.word_timestamps,
+            )
+
+        from VSE_Transcrib.engines.local_whisper import LocalWhisperConfig
         return LocalWhisperConfig(
             language=lw.language or None,
             model_size=lw.model_size,
             device=lw.device,
             compute_type=lw.compute_type,
             word_timestamps=lw.word_timestamps,
+            model_dir=lw.model_dir or "",
         )
 
     def _transcript_to_json(self, transcript: "Transcript") -> str:
