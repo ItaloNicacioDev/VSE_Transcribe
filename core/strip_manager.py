@@ -22,20 +22,36 @@ from typing import List, Optional
 
 try:
     import bpy  # type: ignore
-    from bpy.types import Scene, SequenceEditor, TextSequence  # type: ignore
     _HAS_BPY = True
 except ImportError:  # fora do Blender (testes de sintaxe / lint apenas)
-    Scene = object  # type: ignore
-    SequenceEditor = object  # type: ignore
-    TextSequence = object  # type: ignore
+    bpy = None  # type: ignore
     _HAS_BPY = False
+
+# Só usados como anotação (strings). No Blender 5.x alguns nomes mudaram
+# (ex.: TextSequence -> TextStrip), então NÃO importamos de bpy.types.
+Scene = object  # type: ignore
+SequenceEditor = object  # type: ignore
+TextSequence = object  # type: ignore
+
+
+def _strips_collection(seq_editor):
+    """Coleção de strips do nível superior (Blender 5.x: strips; 4.x: sequences)."""
+    coll = getattr(seq_editor, "strips", None)
+    if coll is None:
+        coll = getattr(seq_editor, "sequences", None)
+    return coll
+
 
 # Helper local para compatibilidade Blender 5.2+ (sequences_all) / 4.x (sequences)
 def _get_sequences_local(seq_editor: "SequenceEditor") -> List:
     """Get sequences list with Blender version compatibility."""
     if seq_editor is None:
         return []
-    return getattr(seq_editor, "sequences_all", None) or getattr(seq_editor, "sequences", [])
+    for attr in ("strips_all", "sequences_all", "strips", "sequences"):
+        coll = getattr(seq_editor, attr, None)
+        if coll is not None:
+            return coll
+    return []
 
 # Importação tolerante: o Subagente 1 pode ainda não ter entregue os módulos.
 try:
@@ -178,7 +194,7 @@ class StripManager:
                 continue
             if strip.get(MANAGED_KEY):
                 try:
-                    self.sequencer.sequences.remove(strip)
+                    _strips_collection(self.sequencer).remove(strip)
                 except Exception:
                     # strip já removido externamente
                     pass
@@ -198,7 +214,7 @@ class StripManager:
         managed = self.get_managed_strips()
         for strip in managed:
             try:
-                self.sequencer.sequences.remove(strip)
+                _strips_collection(self.sequencer).remove(strip)
             except Exception:
                 pass
         return len(managed)
@@ -233,7 +249,7 @@ class StripManager:
         Preferência: ``sequences.new_text`` (atalho específico). Fallback:
         ``sequences.new_effect(type='TEXT')``.
         """
-        seqs = self.sequencer.sequences
+        seqs = _strips_collection(self.sequencer)
 
         if hasattr(seqs, "new_text"):
             strip = seqs.new_text(
