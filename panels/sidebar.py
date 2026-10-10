@@ -103,8 +103,12 @@ class VSETRANSCRIBE_PT_sidebar(Panel):
 
         # --- ENGINE SELECTION (compact) ---
         box = layout.box()
-        box.label(text="Engine: Local Whisper", icon="FILE_TICK")
-        self._draw_local_whisper_settings(box, settings)
+        box.label(text="Engine", icon="FILE_TICK")
+        box.prop(settings, "engine_type", expand=True)
+        if settings.engine_type == "GROQ":
+            self._draw_groq_settings(box, settings)
+        else:
+            self._draw_local_whisper_settings(box, settings)
 
         layout.separator()
 
@@ -238,6 +242,16 @@ class VSETRANSCRIBE_PT_sidebar(Panel):
         millis = int((seconds - int(seconds)) * 1000)
         return f"{minutes:02d}:{secs:02d}.{millis:03d}"
 
+    def _draw_groq_settings(self, box, settings):
+        box.prop(settings, "groq_model", text="Model")
+        try:
+            addon_id = (__package__ or "VSE_Transcrib").split(".")[0]
+            prefs = bpy.context.preferences.addons[addon_id].preferences
+            box.prop(prefs, "groq_api_key", text="API Key")
+        except Exception:
+            box.label(text="Set the key in Preferences > Add-ons", icon="ERROR")
+        box.prop(settings.local_whisper, "word_timestamps")
+
     def _draw_local_whisper_settings(self, box, settings):
         row = box.row()
         row.prop(settings.local_whisper, "model_size")
@@ -265,4 +279,4 @@ class VSETRANSCRIBE_PT_sidebar(Panel):
         row.prop(sub, "gap_threshold", text="Gap")
 
 
-# Registration handled by __init__.pyS
+# Registration handled by __init__.py
