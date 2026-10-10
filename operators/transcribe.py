@@ -121,11 +121,11 @@ def _poll_job(job_id: str):
         settings.status_text = f"Error: {snapshot['error']}"
         return None
 
-    _finalize_transcript(scene, settings, snapshot["result"])
+    _finalize_transcript(scene, settings, snapshot["result"], snapshot.get("frame_offset", 0))
     return None
 
 
-def _finalize_transcript(scene, settings, transcript) -> None:
+def _finalize_transcript(scene, settings, transcript, frame_offset: int = 0) -> None:
     """Store transcript and auto-create subtitle strips (main thread)."""
     if not transcript or transcript.is_empty:
         settings.status_text = "No speech detected"
@@ -137,7 +137,9 @@ def _finalize_transcript(scene, settings, transcript) -> None:
 
     try:
         from VSE_Transcrib.core.subtitle_engine import SubtitleConfig, prepare_subtitles
-        from VSE_Transcrib.core.strip_manager import StripManager
+        from VSE_Transcrib.core.strip_manager import (
+            StripManager, MANAGED_KEY, _get_sequences_local,
+        )
 
         blocks = prepare_subtitles(transcript, SubtitleConfig(
             max_chars_per_line=settings.subtitle.max_chars_per_line,
@@ -152,8 +154,16 @@ def _finalize_transcript(scene, settings, transcript) -> None:
         if not scene.sequence_editor:
             scene.sequence_editor_create()
 
-        channel = 5
-        strips = StripManager(scene, scene.sequence_editor).create_subtitle_strips(blocks, channel)
+        manager = StripManager(scene, scene.sequence_editor)
+        manager.clear_managed_strips()  # evita legendas duplicadas ao re-transcrever
+
+        # Canal logo acima de TODOS os strips que não são legenda
+        others = [
+            s.channel for s in _get_sequences_local(scene.sequence_editor)
+            if not s.get(MANAGED_KEY)
+        ]
+        channel = (max(others) + 1) if others else 1
+        strips = manager.create_subtitle_strips(blocks, channel, frame_offset=frame_offset)
 
         settings.generated_strips.clear()
         for strip in strips:
@@ -238,6 +248,7 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
                 "start_time": time.time(),
                 "progress": 0.0,
                 "current_word": "",
+                "frame_offset": int(strip.frame_final_start),
             }
 
         settings.is_transcribing = True
