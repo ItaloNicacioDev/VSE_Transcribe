@@ -287,6 +287,53 @@ def _render_audio_fallback(
         return False, f"Render fallback failed: {e}"
 
 
+def analyze_audio(path: str):
+    """Quick sanity check of an extracted WAV: duration, peak and RMS (0..1).
+
+    Returns None if the file is not a plain PCM WAV (e.g. render-fallback output).
+    Samples are subsampled, so this is fast even for long files.
+    """
+    import array
+    import sys
+    import wave
+
+    try:
+        with wave.open(path, "rb") as w:
+            channels, width = w.getnchannels(), w.getsampwidth()
+            rate, frames = w.getframerate(), w.getnframes()
+            info = {
+                "duration": frames / float(rate or 1),
+                "rate": rate,
+                "channels": channels,
+                "peak": None,
+                "rms": None,
+            }
+            if width != 2 or frames == 0:
+                return info
+            step = max(1, (frames * channels) // 200000)
+            peak = 0
+            sumsq = 0.0
+            count = 0
+            while True:
+                data = w.readframes(65536)
+                if not data:
+                    break
+                a = array.array("h")
+                a.frombytes(data[: len(data) - (len(data) % 2)])
+                if sys.byteorder == "big":
+                    a.byteswap()
+                sub = a[::step]
+                if sub:
+                    peak = max(peak, max(abs(v) for v in sub))
+                    sumsq += sum(v * v for v in sub)
+                    count += len(sub)
+            info["peak"] = peak / 32768.0
+            info["rms"] = ((sumsq / count) ** 0.5) / 32768.0 if count else 0.0
+            return info
+    except Exception:
+        return None
+
+
 def _linked_audio_strips(strip, seq_editor) -> list:
     """Return [strip] + the SOUND strip(s) that carry this MOVIE strip's audio.
 
