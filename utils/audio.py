@@ -29,7 +29,11 @@ def _get_sequences(seq_editor):
     if seq_editor is None:
         return []
     # Blender 5.2+ uses sequences_all, older versions use sequences
-    return getattr(seq_editor, "sequences_all", None) or getattr(seq_editor, "sequences", [])
+    for attr in ("strips_all", "sequences_all", "strips", "sequences"):
+        coll = getattr(seq_editor, attr, None)
+        if coll is not None:
+            return coll
+    return []
 
 
 def _validate_strip_has_audio(strip: "Sequence") -> tuple[bool, str]:
