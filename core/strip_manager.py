@@ -250,22 +250,21 @@ class StripManager:
         ``sequences.new_effect(type='TEXT')``.
         """
         seqs = _strips_collection(self.sequencer)
+        length = max(1, int(frame_end) - int(frame_start))
+
+        def _create(fn, **extra):
+            # Blender 5.x usa ``length``; versões antigas usam ``frame_end``.
+            try:
+                return fn(name=name, channel=channel, frame_start=frame_start,
+                          length=length, **extra)
+            except TypeError:
+                return fn(name=name, channel=channel, frame_start=frame_start,
+                          frame_end=frame_end, **extra)
 
         if hasattr(seqs, "new_text"):
-            strip = seqs.new_text(
-                name=name,
-                channel=channel,
-                frame_start=frame_start,
-                frame_end=frame_end,
-            )
+            strip = _create(seqs.new_text)
         else:
-            strip = seqs.new_effect(
-                name=name,
-                type="TEXT",
-                channel=channel,
-                frame_start=frame_start,
-                frame_end=frame_end,
-            )
+            strip = _create(seqs.new_effect, type="TEXT")
 
         # ``text`` é a propriedade padrão do TextSequence em 4.x.
         # Blender 5.x pode usar ``body``. Tentamos ambos.
