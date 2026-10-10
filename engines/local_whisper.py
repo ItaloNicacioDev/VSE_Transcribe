@@ -15,7 +15,7 @@ import os
 
 
 # Valid configuration values
-VALID_MODEL_SIZES = ("small", "medium", "large-v3-turbo")
+VALID_MODEL_SIZES = ("tiny", "base", "small", "medium", "large-v3", "large-v3-turbo")
 VALID_DEVICES = ("cpu", "cuda", "auto")
 VALID_COMPUTE_TYPES = ("int8", "int8_float16", "float16", "float32")
 
