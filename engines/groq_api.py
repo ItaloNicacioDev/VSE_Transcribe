@@ -99,8 +99,8 @@ class GroqEngine(TranscriptionEngine):
                     except OSError:
                         pass
 
-        if segments and duration < segments[-1].end:
-            duration = segments[-1].end
+        if segments:
+            duration = max(duration, max(s.end for s in segments))
 
         code = config.language or _LANG_NAMES.get(language.lower(), language) or "unknown"
         return Transcript(
