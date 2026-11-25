@@ -172,6 +172,7 @@ def prepare_subtitles(
         config = SubtitleConfig()
     normalized = normalize_transcript(transcript)
     segments = filter_empty_segments(normalized.segments)
+    segments = merge_segments(segments, config.gap_threshold)
 
     blocks: List[SubtitleBlock] = []
     for seg in segments:
