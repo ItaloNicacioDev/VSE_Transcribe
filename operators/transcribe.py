@@ -11,6 +11,9 @@ import os
 import tempfile
 import threading
 import time
+
+from VSE_Transcrib.core.job_store import get_job, pop_job, set_job
+
 from typing import TYPE_CHECKING, Callable, Optional
 
 if TYPE_CHECKING:
@@ -32,8 +35,7 @@ except ImportError:
     _HAS_BPY = False
 
 
-# Global storage for async transcription results
-_transcription_results = {}
+# Global storage for async transcription results (shared with cancel operator)
 _transcription_lock = threading.Lock()
 
 
@@ -59,9 +61,7 @@ def _transcript_to_json(transcript) -> str:
 
 
 def _set_job(job_id: str, **fields) -> None:
-    with _transcription_lock:
-        if job_id in _transcription_results:
-            _transcription_results[job_id].update(fields)
+    set_job(job_id, **fields)
 
 
 def _run_transcription_thread(job_id: str, audio_path: str, config) -> None:
@@ -104,17 +104,14 @@ def _tag_redraw() -> None:
 
 def _poll_job(job_id: str):
     """Main-thread timer: updates UI props and finalizes the job."""
-    with _transcription_lock:
-        data = _transcription_results.get(job_id)
-        if data is None:
-            return None
-        snapshot = dict(data)
+    snapshot = get_job(job_id)
+    if snapshot is None:
+        return None
 
     scene = bpy.data.scenes.get(snapshot["scene_name"])
     settings = getattr(scene, "vse_transcribe", None) if scene else None
     if settings is None:
-        with _transcription_lock:
-            _transcription_results.pop(job_id, None)
+        pop_job(job_id)
         return None
 
     status = snapshot["status"]
@@ -126,8 +123,7 @@ def _poll_job(job_id: str):
         return 0.5
 
     settings.is_transcribing = False
-    with _transcription_lock:
-        _transcription_results.pop(job_id, None)
+    pop_job(job_id)
 
     if status == "error":
         print(f"[VSE_Transcribe] Transcription failed: {snapshot['error']}")
@@ -296,18 +292,18 @@ class VSETRANSCRIBE_OT_transcribe(Operator):
         import uuid
         job_id = str(uuid.uuid4())[:8]
 
-        with _transcription_lock:
-            _transcription_results[job_id] = {
-                "status": "started",
-                "scene_name": context.scene.name,
-                "result": None,
-                "error": None,
-                "start_time": time.time(),
-                "progress": 0.0,
-                "current_word": "",
-                "frame_offset": int(strip.frame_final_start),
-                "audio_info": audio_info,
-            }
+        set_job(
+            job_id,
+            status="started",
+            scene_name=context.scene.name,
+            result=None,
+            error=None,
+            start_time=time.time(),
+            progress=0.0,
+            current_word="",
+            frame_offset=int(strip.frame_final_start),
+            audio_info=audio_info,
+        )
 
         settings.is_transcribing = True
         settings.transcription_job_id = job_id
