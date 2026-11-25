@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 from typing import List
 
 from ..models.transcript import Transcript
-from .transcription import filter_empty_segments, normalize_transcript
+from .transcription import filter_empty_segments, merge_segments, normalize_transcript
 
 
 @dataclass
