@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import os
 import threading
-import time
+import uuid
+
+from VSE_Transcrib.core.job_store import get_job, set_job
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -53,8 +55,15 @@ class VSETRANSCRIBE_OT_download_model(Operator):
         settings = context.scene.vse_transcribe
         
         # Store job info for async processing
-        job_id = str(hash(time.time()))  # simple job id
-        
+        job_id = str(uuid.uuid4())[:8]
+
+        set_job(
+            job_id,
+            status="started",
+            scene_name=context.scene.name,
+            error=None,
+        )
+
         # Mark as downloading
         settings.is_transcribing = True  # reuse the flag for simplicity
         settings.transcription_job_id = job_id
@@ -71,19 +80,25 @@ class VSETRANSCRIBE_OT_download_model(Operator):
 
         # Register timer to check progress
         def check_progress():
-            import bpy
-            # We don't have a global storage for download jobs, so we just wait for the thread to finish
-            # and check a flag in settings? We'll use a simple approach: wait for the thread to finish by checking if the model is now downloaded.
-            # For simplicity, we'll just check after a short delay and then report.
-            # In a real implementation, we would have a job storage similar to transcription.
-            # We'll just wait 2 seconds and then check.
-            time.sleep(2)
-            if self._is_model_downloaded(settings):
-                self.report({"INFO"}, "Model download completed.")
+            job = get_job(job_id)
+            if job is None:
+                # Job was removed (cancelled / operator gone)
                 settings.is_transcribing = False
+                return None
+
+            if job.get("status") == "error":
+                settings.is_transcribing = False
+                settings.transcription_job_id = ""
+                self.report({"ERROR"}, f"Model download failed: {job.get('error')}")
+                return None
+
+            if self._is_model_downloaded(settings):
+                settings.is_transcribing = False
+                settings.transcription_job_id = ""
+                self.report({"INFO"}, "Model download completed.")
                 return None  # Stop timer
-            else:
-                return 2.0  # Check again in 2 seconds
+
+            return 2.0  # Check again in 2 seconds
 
         bpy.app.timers.register(check_progress, first_interval=2.0)
         
@@ -128,18 +143,13 @@ class VSETRANSCRIBE_OT_download_model(Operator):
                 config.compute_type,
                 config.model_dir,
             )
-            
-            # Success
-            # We'll set a flag in settings? We don't have a place for download status.
-            # We'll just rely on the timer checking _is_model_downloaded.
-            
+
+            set_job(job_id, status="done")
+
         except EngineNotAvailableError as e:
-            self.report({"ERROR"}, f"Local Whisper engine not available: {e}")
+            set_job(job_id, status="error", error=f"Local Whisper engine not available: {e}")
         except Exception as e:
-            self.report({"ERROR"}, f"Unexpected error: {e}")
-        finally:
-            # Cleanup
-            settings.is_transcribing = False
+            set_job(job_id, status="error", error=f"Unexpected error: {e}")
 
 
 # Registration handled by __init__.py
