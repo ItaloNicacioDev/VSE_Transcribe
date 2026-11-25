@@ -49,3 +49,6 @@ operators/__pycache__/download_model.cpython-314.pyc
 consulta.sql
 
 build_zip.py
+__pycache__/build_zip.cpython-314.pyc
+core/__pycache__/job_store.cpython-314.pyc
+engines/__pycache__/groq_api.cpython-314.pyc
