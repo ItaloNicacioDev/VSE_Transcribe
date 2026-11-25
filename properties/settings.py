@@ -238,6 +238,12 @@ class VSETranscribeSettings(PropertyGroup):
         default=False,
     )
 
+    auto_create_subtitle_strips: BoolProperty(
+        name="Auto-create Subtitle Strips",
+        description="Automatically create VSE subtitle strips after transcription finishes",
+        default=True,
+    )
+
     # Local Whisper settings
     local_whisper: PointerProperty(type=LocalWhisperProps)
 
