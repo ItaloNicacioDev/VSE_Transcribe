@@ -203,7 +203,6 @@ def _mixdown_audio(
                     relative_path=False,
                     container="WAV",
                     codec="PCM",
-                    format="S16",
                 )
             except Exception as e:
                 return False, f"sound.mixdown failed: {e}"
