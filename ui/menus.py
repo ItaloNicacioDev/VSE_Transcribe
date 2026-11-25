@@ -35,7 +35,7 @@ class VSETRANSCRIBE_MT_main_menu(Menu):
         layout.operator("vse_transcribe.transcribe", icon="REC")
 
         # Generate subtitles
-        layout.operator("vse_transcribe.generate_subtitles", icon="PLUS")
+        layout.operator("vse_transcribe.create_subtitles", icon="PLUS")
 
         # Clear subtitles
         layout.operator("vse_transcribe.clear_subtitles", icon="TRASH")
